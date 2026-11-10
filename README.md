@@ -8,6 +8,16 @@ AxisOS is its own kernel. It does not run real Linux, Windows or FreeBSD
 programs; instead it gives you each system's commands, prompt, path style and
 look, and lets you use all of them together.
 
+## Download
+
+Grab the ready-to-run disk image from the **[Releases page](https://github.com/noahnoahg1234/Project-Axis-Os/releases/latest)** (the download button is on the right of the repo page, under *Releases*). Download **axisos.img**, then:
+
+```bash
+qemu-system-i386 -drive file=axisos.img,format=raw -nic user,model=e1000
+```
+
+Install QEMU first from https://www.qemu.org/download/. On Windows, use the full path to `qemu-system-i386.exe`. Or build it yourself with `make` (see below).
+
 ## Features
 
 | Feature | Details |

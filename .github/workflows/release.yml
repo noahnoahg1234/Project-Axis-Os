@@ -1,0 +1,46 @@
+name: Build and Release AxisOS
+
+# Builds the bootable image and publishes it as a downloadable release asset.
+# Triggered by pushing a version tag (e.g. v1.0), or run manually.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y nasm gcc-multilib binutils python3
+
+      - name: Build the disk image
+        run: make
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/axisos.img dist/axisos.img
+          (cd dist && zip -9 axisos.zip axisos.img)
+          ls -l dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axisos-image
+          path: dist/axisos.img
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${GITHUB_REF_NAME}"
+          dist/axisos.img dist/axisos.zip
+          --title "AxisOS ${GITHUB_REF_NAME}"
+          --notes-file .github/RELEASE_NOTES.md
