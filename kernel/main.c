@@ -112,6 +112,13 @@ void kmain(void) {
         boot_line(line);
     } else
         boot_line("No ATA disk found - running from RAM");
+    if (net_init()) {
+        char ips[16];
+        ip_to_str(net_ip, ips);
+        snprintf(line, sizeof line, "Network: %s, IP %s", net_nic_name(), ips);
+        boot_line(line);
+    } else
+        boot_line("No supported network card - networking disabled");
     config_load();
     boot_line(storage_ready() ? "Settings loaded from AxisOS disk" : "Using default settings");
     fs_init();

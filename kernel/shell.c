@@ -535,6 +535,7 @@ static int tokenize(char *s, char **argv, int max) {
 }
 
 /* expand $VAR ${VAR} %VAR% $? (not inside single quotes) */
+void shell_expand(const char *in, char *out, size_t n);
 static void expand_vars(const char *in, char *out, size_t n) {
     size_t o = 0;
     bool sq = false;
@@ -542,7 +543,7 @@ static void expand_vars(const char *in, char *out, size_t n) {
         if (*in == '\'' ) sq = !sq;
         const char *val = NULL;
         char name[32];
-        if (!sq && *in == '$' && (in[1] == '{' || isalpha(in[1]) || in[1] == '_' || in[1] == '?')) {
+        if (!sq && *in == '$' && (in[1] == '{' || isalnum(in[1]) || in[1] == '_' || in[1] == '?')) {
             const char *p = in + 1;
             bool br = *p == '{';
             if (br) p++;
@@ -580,6 +581,8 @@ static void expand_vars(const char *in, char *out, size_t n) {
     out[o] = 0;
 }
 
+void shell_expand(const char *in, char *out, size_t n) { expand_vars(in, out, n); }
+
 /* ---- execution ---------------------------------------------------------- */
 static int run_argv(int argc, char **argv) {
     if (!argc) return 0;
@@ -613,7 +616,15 @@ static int run_argv(int argc, char **argv) {
         con_set_attr(s);
         return 1;
     }
+    if (!c && app_try_run(argc, argv)) return 0;
     if (!c) {
+        /* a script file typed by name: ./x.sh, x.bat */
+        size_t nl = strlen(name);
+        if ((nl > 3 && (!strcasecmp(name + nl - 3, ".sh") || !strcasecmp(name + nl - 4, ".bat") || !strcasecmp(name + nl - 4, ".cmd"))) ||
+            !strncmp(name, "./", 2)) {
+            int id = fs_resolve(!strncmp(name, "./", 2) ? name + 2 : name, fs_cwd);
+            if (id >= 0 && fs_nodes[id].type == FT_FILE) return script_run(name, argc, argv);
+        }
         if (adv_mode || cfg.autocorrect == AC_OFF) {
             not_found(name);
             return 127;

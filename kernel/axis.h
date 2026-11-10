@@ -43,6 +43,8 @@ char *strcat(char *d, const char *s);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
 char *strcasestr(const char *h, const char *n);
+char *strstr(const char *h, const char *n);
+void *memchr(const void *s, int c, size_t n);
 char *kstrdup(const char *s);
 int tolower(int c);
 int toupper(int c);
@@ -52,6 +54,7 @@ int isalnum(int c);
 int isspace(int c);
 int isxdigit(int c);
 void str_lower(char *s);
+char *strtok_simple(char *s);
 long strtol(const char *s, const char **end, int base);
 int atoi(const char *s);
 int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
@@ -144,6 +147,7 @@ enum {
 void kbd_init(void);
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
+bool kbd_ctrl_c_pending(void);
 
 /* ------------------------------------------------------------- ata.c ---- */
 bool ata_init(void);
@@ -290,6 +294,8 @@ void env_set(const char *name, const char *value);
 void env_unset(const char *name);
 int env_list(char names[][32], char values[][128], int max);
 void shell_print_error(int code, const char *what);
+void shell_expand(const char *in, char *out, size_t n);
+bool calc_eval(const char *expr, long *out);
 bool shell_confirm(const char *question);
 int shell_history_count(void);
 const char *shell_history_get(int i);
@@ -297,7 +303,39 @@ int alias_set(const char *name, const char *value);
 void alias_list(void);
 int line_edit(char *buf, size_t n, bool history, bool complete);
 
+/* ------------------------------------------------------------- net.c ---- */
+typedef struct {
+    int status;
+    char *body; /* kmalloc'd, NUL terminated */
+    uint32_t len;
+    char location[512];
+    char ctype[64];
+} http_resp_t;
+enum { HTTP_ENONET = -1, HTTP_EURL = -2, HTTP_EDNS = -3, HTTP_ECONN = -4, HTTP_EPROTO = -5, HTTP_EABORT = -6 };
+extern uint8_t net_mac[6];
+extern uint32_t net_ip, net_mask, net_gw, net_dns;
+bool net_init(void);
+bool net_renew(void);
+bool net_present(void);
+bool net_up(void);
+const char *net_nic_name(void);
+void net_stats(uint32_t *rx, uint32_t *tx);
+void net_poll(void);
+int net_ping(uint32_t ip, uint16_t seq, uint32_t timeout_ms);
+bool net_resolve(const char *host, uint32_t *ip);
+void ip_to_str(uint32_t ip, char *out16);
+bool str_to_ip(const char *s, uint32_t *ip);
+bool url_split(const char *url, char *host, size_t hn, uint16_t *port, char *path, size_t pn);
+int http_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total));
+const char *http_strerror(int e);
+
 /* --------------------------------------------------------- apps --------- */
+int browser_run(const char *url);
+int store_run(void);
+int shello_run(void);
+int script_run(const char *path, int argc, char **argv);
+bool app_try_run(int argc, char **argv); /* installed app by name */
+int apps_list(void);
 int explorer_run(const char *start);
 int editor_run(const char *path);
 int settings_run(void);

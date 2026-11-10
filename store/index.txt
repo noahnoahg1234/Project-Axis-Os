@@ -1,0 +1,5 @@
+# AxisOS App Store repository index
+# One app per line:  command|Name|Category|Description|script file (relative to this index, or http://...)
+dice|Dice Roller|Games|Roll one or more six-sided dice.|dice.sh
+timer|Countdown Timer|Tools|Counts down a number of seconds and tells you when time is up.|timer.sh
+quiz|Computer Quiz|Games|Five questions about computers and operating systems.|quiz.sh

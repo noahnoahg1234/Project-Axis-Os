@@ -6,8 +6,11 @@
 Needs qemu-system-i386. Each check prints PASS/FAIL; the exit code is the
 number of failures.
 """
+import functools
+import http.server
 import os
 import shutil
+import threading
 import sys
 import tempfile
 import time
@@ -116,6 +119,67 @@ check("exit leaves advanced mode", "Left advanced mode" in out, out)
 out = vm.run("os linux", "$")
 check("switch personality at runtime", "Axis/Linux" in out, out)
 vm.close()
+
+# ------------------------------------- network, browser, store, shello ----
+# serve the sample app repository (store/) on the host; QEMU's user network
+# reaches the host as 10.0.2.2
+store_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "store")
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+handler = functools.partial(QuietHandler, directory=store_dir)
+httpd = http.server.ThreadingHTTPServer(("0.0.0.0", 0), handler)
+port = httpd.server_address[1]
+threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+vm, ok = boot("1", "$")
+out = vm.run("ifconfig", "$")
+check("network card configured by DHCP", "10.0.2.15" in out, out)
+out = vm.run("ping -c 1 10.0.2.2", "$")
+check("ping", "1 received" in out, out)
+out = vm.run("curl http://10.0.2.2:%d/index.txt | grep dice" % port, "$", 20)
+check("HTTP download (curl)", "Dice Roller" in out, out)
+out = vm.run("wget http://10.0.2.2:%d/quiz.sh && grep SCORE quiz.sh | head -n 1" % port, "$", 20)
+check("wget saves files", "SCORE" in out, out)
+vm.type("browser http://10.0.2.2:%d/\r" % port)
+time.sleep(2.0)
+shot(vm, "browser")
+vm.key("q")
+time.sleep(0.4)
+out = vm.run("echo after browser", "$")
+check("browser opens and closes", "after browser" in out, out)
+vm.type("store\r")
+time.sleep(1.0)
+shot(vm, "store")
+vm.key("down", "down", "down", "down", "down", "down", "down", "ret")   # Guess the Number
+time.sleep(0.6)
+vm.key("a")
+time.sleep(0.3)
+vm.type("10.0.2.2:%d/index.txt\r" % port)
+time.sleep(3)
+vm.key("ret")                                                          # install Dice Roller
+time.sleep(2)
+vm.key("q")
+time.sleep(0.4)
+out = vm.run("apps", "$")
+check("store installs built-in and online apps", "guess" in out and "dice" in out, out)
+vm.type("dice\r")
+time.sleep(0.6)
+out = vm.run("2", "$", 10)
+check("downloaded script app runs", "Total:" in out, out)
+vm.type("shello\r")
+ok = vm.wait_for("READY.", 10)
+check("shello starts", ok)
+mark = len(vm.log)
+vm.type("mem\r")
+ok = vm.wait_for("BYTES FREE", 5, mark)
+check("shello runs its commands", ok)
+out = vm.run("bye", "$")
+check("BYE returns to axsh", "AxisOS" in out, out)
+vm.close()
+httpd.shutdown()
 
 # ---------------------------------------------------------- persistence ----
 tmp = tempfile.mkdtemp(prefix="axis-persist-")

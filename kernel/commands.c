@@ -1505,6 +1505,16 @@ static long calc_expr(void) {
         else return v;
     }
 }
+bool calc_eval(const char *expr, long *out) {
+    cp = expr;
+    calc_err = 0;
+    long v = calc_expr();
+    calc_ws();
+    if (*cp || calc_err) return false;
+    *out = v;
+    return true;
+}
+
 static int c_calc(int argc, char **argv) {
     char e[256] = "";
     for (int i = 1; i < argc; i++) {
@@ -1640,6 +1650,204 @@ static int c_format(int argc, char **argv) {
     return 0;
 }
 
+
+/* ======================================================= network ======== */
+static int c_ifconfig(int argc, char **argv) {
+    if (!net_present()) {
+        kprintf("No network card found. In QEMU the default card (e1000) works.\n");
+        return 1;
+    }
+    if (argc > 1 && (!strcasecmp(argv[1], "/renew") || !strcasecmp(argv[1], "renew") || !strcasecmp(argv[1], "-r"))) {
+        kprintf(net_renew() ? "DHCP lease renewed.\n" : "No DHCP server answered.\n");
+    }
+    char ip[16], mask[16], gw[16], dns[16];
+    ip_to_str(net_ip, ip);
+    ip_to_str(net_mask, mask);
+    ip_to_str(net_gw, gw);
+    ip_to_str(net_dns, dns);
+    uint32_t rx, tx;
+    net_stats(&rx, &tx);
+    if (!strcasecmp(argv[0], "ipconfig")) {
+        kprintf("\nAxisOS IP Configuration\n\nEthernet adapter eth0:\n\n");
+        kprintf("   Description . . . . . . . . . . : %s\n", net_nic_name());
+        kprintf("   Physical Address. . . . . . . . : %02X-%02X-%02X-%02X-%02X-%02X\n", net_mac[0], net_mac[1], net_mac[2], net_mac[3], net_mac[4], net_mac[5]);
+        kprintf("   IPv4 Address. . . . . . . . . . : %s\n   Subnet Mask . . . . . . . . . . : %s\n", ip, mask);
+        kprintf("   Default Gateway . . . . . . . . : %s\n   DNS Servers . . . . . . . . . . : %s\n", gw, dns);
+        return 0;
+    }
+    kprintf("%s: flags=8843<UP,BROADCAST,RUNNING,MULTICAST> mtu 1500\n", cur_os == OS_FREEBSD ? "em0" : "eth0");
+    kprintf("        inet %s  netmask %s  gateway %s  dns %s\n", ip, mask, gw, dns);
+    kprintf("        ether %02x:%02x:%02x:%02x:%02x:%02x  (%s)\n", net_mac[0], net_mac[1], net_mac[2], net_mac[3], net_mac[4], net_mac[5], net_nic_name());
+    kprintf("        RX packets %u  TX packets %u\n", rx, tx);
+    return 0;
+}
+
+static int c_ping(int argc, char **argv) {
+    const char *host = NULL;
+    int count = 4;
+    for (int i = 1; i < argc; i++) {
+        if ((!strcmp(argv[i], "-c") || !strcasecmp(argv[i], "-n") || !strcasecmp(argv[i], "/n")) && i + 1 < argc) count = atoi(argv[++i]);
+        else if (!is_flag(argv[i])) host = argv[i];
+    }
+    if (!host) {
+        kprintf("usage: ping [-c count] host\n");
+        return 1;
+    }
+    uint32_t ip;
+    if (!net_resolve(host, &ip)) {
+        shell_print_error(E_NOENT, host);
+        return 1;
+    }
+    char ips[16];
+    ip_to_str(ip, ips);
+    bool win = cur_os == OS_WINDOWS;
+    if (win) kprintf("\nPinging %s [%s] with 32 bytes of data:\n", host, ips);
+    else kprintf("PING %s (%s): 32 data bytes\n", host, ips);
+    int ok = 0;
+    for (int i = 0; i < count; i++) {
+        int rtt = net_ping(ip, (uint16_t)(i + 1), 2000);
+        if (rtt >= 0) {
+            ok++;
+            if (win) kprintf("Reply from %s: bytes=32 time=%dms TTL=64\n", ips, rtt);
+            else kprintf("40 bytes from %s: icmp_seq=%d ttl=64 time=%d ms\n", ips, i, rtt);
+        } else
+            kprintf(win ? "Request timed out.\n" : "Request timeout for icmp_seq %d\n", i);
+        if (kbd_trygetkey() == KEY_CTRL('c')) break;
+        if (i + 1 < count) sleep_ms(500);
+    }
+    kprintf("--- %s: %d sent, %d received, %d%% loss\n", host, count, ok, count ? (count - ok) * 100 / count : 0);
+    return ok ? 0 : 1;
+}
+
+static int c_nslookup(int argc, char **argv) {
+    if (argc < 2) {
+        kprintf("usage: nslookup host\n");
+        return 1;
+    }
+    /* nslookup host [server] */
+    uint32_t ip, saved = net_dns, server;
+    const char *host = argv[1];
+    if (argc > 2) {
+        if (!str_to_ip(argv[2], &server)) {
+            shell_print_error(E_INVAL, argv[2]);
+            return 1;
+        }
+        net_dns = server;
+    }
+    char dns[16], ips[16];
+    ip_to_str(net_dns, dns);
+    kprintf("Server:  %s\n", dns);
+    bool ok = net_resolve(host, &ip);
+    net_dns = saved;
+    if (!ok) {
+        kprintf("** server can't find %s\n", host);
+        return 1;
+    }
+    ip_to_str(ip, ips);
+    kprintf("Name:    %s\nAddress: %s\n", host, ips);
+    return 0;
+}
+
+static void dl_progress(uint32_t got, uint32_t total) {
+    static uint32_t last;
+    if (con_capturing() || ticks - last < 20) return;
+    last = ticks;
+    if (total) kprintf("\r  %u / %u bytes (%u%%)   ", got, total, total ? got * 100 / total : 0);
+    else kprintf("\r  %u bytes   ", got);
+}
+
+static int c_wget(int argc, char **argv) {
+    const char *url = NULL, *out = NULL;
+    bool curl = !strcasecmp(argv[0], "curl");
+    for (int i = 1; i < argc; i++) {
+        if ((!strcmp(argv[i], "-O") || !strcmp(argv[i], "-o")) && i + 1 < argc) out = argv[++i];
+        else if (!is_flag(argv[i])) url = argv[i];
+    }
+    if (!url) {
+        kprintf("usage: %s http://host/path [-o file]\n", argv[0]);
+        return 1;
+    }
+    if (!strncasecmp(url, "https://", 8)) {
+        shell_print_error(E_INVAL, "https is not supported - use an http:// address");
+        return 1;
+    }
+    char full[512];
+    if (!strstr(url, "://")) snprintf(full, sizeof full, "http://%s", url);
+    else strlcpy(full, url, sizeof full);
+    http_resp_t r;
+    int st = 0;
+    for (int hops = 0; hops < 5; hops++) {
+        if (!curl && !con_capturing()) kprintf("Fetching %s\n", full);
+        st = http_get(full, &r, (curl || con_capturing()) ? NULL : dl_progress);
+        if (st >= 300 && st < 400 && r.location[0] && strncasecmp(r.location, "https://", 8)) {
+            if (r.location[0] == '/') {
+                char host[128], path[512];
+                uint16_t port;
+                url_split(full, host, sizeof host, &port, path, sizeof path);
+                snprintf(full, sizeof full, "http://%s:%u%s", host, port, r.location);
+            } else
+                strlcpy(full, r.location, sizeof full);
+            kfree(r.body);
+            continue;
+        }
+        break;
+    }
+    if (!curl && !con_capturing()) kprintf("\n");
+    if (st < 0) {
+        shell_print_error(E_IO, http_strerror(st));
+        return 1;
+    }
+    if (st >= 300 && st < 400) {
+        kfree(r.body);
+        shell_print_error(E_INVAL, "redirected to an https:// address, which AxisOS cannot fetch");
+        return 1;
+    }
+    if (curl && !out) {
+        con_writen(r.body, r.len);
+        kfree(r.body);
+        return st >= 400;
+    }
+    char name[FS_NAME_MAX];
+    if (out) strlcpy(name, out, sizeof name);
+    else {
+        const char *q = strrchr(full + 7, '/');
+        strlcpy(name, q && q[1] ? q + 1 : "index.html", sizeof name);
+        char *qq = strchr(name, '?');
+        if (qq) *qq = 0;
+        if (!fs_valid_name(name)) strcpy(name, "download.html");
+    }
+    int id = fs_mkfile(name, fs_cwd);
+    int w = id < 0 ? id : fs_write(id, r.body, r.len);
+    kfree(r.body);
+    if (w < 0) {
+        shell_print_error(w, name);
+        return 1;
+    }
+    if (!con_capturing()) kprintf("HTTP %d - saved %u bytes to %s\n", st, r.len, name);
+    return st >= 400;
+}
+
+static int c_browser(int argc, char **argv) {
+    if (con_capturing()) return 1;
+    return browser_run(argc > 1 ? argv[1] : NULL);
+}
+static int c_store(int argc, char **argv) {
+    if (con_capturing()) return 1;
+    return store_run();
+}
+static int c_shello(int argc, char **argv) {
+    if (con_capturing()) return 1;
+    return shello_run();
+}
+static int c_apps(int argc, char **argv) { return apps_list(); }
+static int c_runscript(int argc, char **argv) {
+    if (argc < 2) {
+        kprintf("usage: %s script [args]\n", argv[0]);
+        return 1;
+    }
+    return script_run(argv[1], argc - 1, argv + 1);
+}
+
 /* ======================================================= table ========== */
 const command_t commands[] = {
     /* linux      windows      freebsd      aliases                       fn            usage                          description */
@@ -1671,6 +1879,15 @@ const command_t commands[] = {
     {"settings",  "control",   "bsdconfig", "config|setup|preferences",   c_settings,   "settings",                    "Open the settings app", 0},
     {"os",        "os",        "os",        "switch|wsl|cmd|bsd|bash|powershell|csh|tcsh", c_os, "os linux|windows|freebsd", "Switch the system personality", 0},
     {"advanced",  "advanced",  "advanced",  "adv|su|sudo|expert",         c_advanced,   "advanced [on|off] | sudo cmd", "Toggle Advanced mode", 0},
+    {"ifconfig",  "ipconfig",  "ifconfig",  "ip|netstat",                 c_ifconfig,   "ifconfig | ipconfig [/renew]", "Show network settings", 0},
+    {"ping",      "ping",      "ping",      "",                           c_ping,       "ping [-c N] host",            "Check that a host answers", 0},
+    {"nslookup",  "nslookup",  "host",      "dig|resolve",                c_nslookup,   "nslookup host [server]",      "Look up a host name (DNS)", 0},
+    {"wget",      "curl",      "fetch",     "download|curl",              c_wget,       "wget http://url [-o file]",   "Download a file from the web", 0},
+    {"browser",   "msedge",    "browser",   "web|lynx|w3m|links|firefox|edge|iexplore|www", c_browser, "browser [url | search words]", "Text web browser", 0},
+    {"store",     "store",     "pkg",       "appstore|apt|winget|ms-store|software", c_store, "store",                 "App Store: find and install apps", 0},
+    {"apps",      "apps",      "apps",      "installed",                  c_apps,       "apps",                        "List installed apps", 0},
+    {"shello",    "shello",    "shello",    "",                           c_shello,     "shello",                      "Shello: the retro shell", 0},
+    {"sh",        "call",      "sh",        "run|source|start",           c_runscript,  "sh script.sh | call script.bat", "Run a script file", 0},
     {"clear",     "cls",       "clear",     "reset",                      c_clear,      "clear",                       "Clear the screen", 0},
     {"uname",     "ver",       "uname",     "freebsd-version|version",    c_uname,      "uname [-a]",                  "Show system version", 0},
     {"neofetch",  "systeminfo","fetch",     "sysinfo|about|winver",       c_fetch,      "neofetch",                    "Show system information", 0},
@@ -1678,7 +1895,7 @@ const command_t commands[] = {
     {"uptime",    "",          "uptime",    "",                           c_uptime,     "uptime",                      "Show how long the system has run", 0},
     {"whoami",    "whoami",    "whoami",    "id",                         c_whoami,     "whoami",                      "Show the current user", 0},
     {"hostname",  "hostname",  "hostname",  "",                           c_hostname,   "hostname [name]",             "Show or set the host name", 0},
-    {"ps",        "tasklist",  "ps",        "top|taskmgr",                c_ps,         "ps",                          "List processes", 0},
+    {"ps",        "tasklist",  "ps",        "top",                c_ps,         "ps",                          "List processes", 0},
     {"free",      "mem",       "vmstat",    "",                           c_free,       "free [-h]",                   "Show memory usage", 0},
     {"df",        "vol",       "df",        "du",                         c_df,         "df",                          "Show disk usage", 0},
     {"lspci",     "",          "pciconf",   "devices",                    c_lspci,      "lspci | pciconf -l",          "List PCI devices", 0},

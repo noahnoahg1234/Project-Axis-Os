@@ -162,3 +162,13 @@ int kbd_getkey(void) {
         cpu_hlt();
     }
 }
+
+/* remove a pending Ctrl+C from the keyboard buffer; true if there was one */
+bool kbd_ctrl_c_pending(void) {
+    for (int i = ktail; i != khead; i = (i + 1) % KBUF)
+        if (kbuf[i] == KEY_CTRL('c')) {
+            khead = ktail = 0;
+            return true;
+        }
+    return false;
+}

@@ -492,9 +492,14 @@ void fs_format(void) {
         "Chain commands with ; or &&\n"
         "Switch system at any time: os linux | os windows | os freebsd\n"
         "Advanced mode: advanced on (expert tools: peek, poke, hexdump,\n"
-        "  inb, outb, sector, cpuid, heap, panic ...)\n", 0);
+        "  inb, outb, sector, cpuid, heap, panic ...)\n\n"
+        "Internet:  browser (or msedge, lynx)  - text web browser\n"
+        "           wget / curl, ping, ifconfig / ipconfig, nslookup\n"
+        "Apps:      store (or winget, apt, pkg) - the App Store\n"
+        "           apps - list installed apps, then type an app's name\n"
+        "Shello:    shello - the retro shell (type BYE to leave)\n", 0);
 
-    char welcome[640];
+    char welcome[900];
     snprintf(welcome, sizeof welcome,
              "Hello %s, welcome to AxisOS!\n\n"
              "Things to try:\n"
@@ -503,6 +508,9 @@ void fs_format(void) {
              "  settings          change theme, default system, autocorrect...\n"
              "  os windows        switch to the Windows personality\n"
              "  sl                typo? autocorrect fixes it to 'ls'\n"
+             "  browser           browse the web (S to search)\n"
+             "  store             install apps: games, paint, calculator...\n"
+             "  shello            the retro shell\n"
              "  cat /usr/share/doc/axis-guide.txt | more\n", cfg.username);
     mkf(home, "welcome.txt", welcome, 0);
     mkf(users, "welcome.txt", welcome, 0);

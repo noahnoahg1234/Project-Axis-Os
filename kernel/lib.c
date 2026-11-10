@@ -107,6 +107,19 @@ char *strcasestr(const char *h, const char *n) {
         if (!strncasecmp(h, n, l)) return (char *)h;
     return NULL;
 }
+char *strstr(const char *h, const char *n) {
+    size_t l = strlen(n);
+    if (!l) return (char *)h;
+    for (; *h; h++)
+        if (!strncmp(h, n, l)) return (char *)h;
+    return NULL;
+}
+void *memchr(const void *s, int c, size_t n) {
+    const uint8_t *p = s;
+    for (; n; n--, p++)
+        if (*p == (uint8_t)c) return (void *)p;
+    return NULL;
+}
 char *kstrdup(const char *s) {
     size_t n = strlen(s) + 1;
     char *d = kmalloc(n);
@@ -272,4 +285,18 @@ void format_size(uint32_t b, char *out, size_t n) {
     if (b < 1024) snprintf(out, n, "%uB", b);
     else if (b < 1024 * 1024) snprintf(out, n, "%u.%uK", b / 1024, (b % 1024) * 10 / 1024);
     else snprintf(out, n, "%u.%uM", b / (1024 * 1024), (b % (1024 * 1024)) * 10 / (1024 * 1024));
+}
+
+/* split on spaces (no quotes); like strtok(s, " ") */
+char *strtok_simple(char *s) {
+    static char *next;
+    if (s) next = s;
+    if (!next) return NULL;
+    while (*next == ' ' || *next == '\t') next++;
+    if (!*next) return next = NULL;
+    char *start = next;
+    while (*next && *next != ' ' && *next != '\t') next++;
+    if (*next) *next++ = 0;
+    else next = NULL;
+    return start;
 }
