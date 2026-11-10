@@ -3,3 +3,6 @@
 dice|Dice Roller|Games|Roll one or more six-sided dice.|dice.sh
 timer|Countdown Timer|Tools|Counts down a number of seconds and tells you when time is up.|timer.sh
 quiz|Computer Quiz|Games|Five questions about computers and operating systems.|quiz.sh
+hello|Hello ELF|Linux|A tiny real Linux program that prints a greeting.|hello.elf
+greet|Greeter|Linux|A Linux program that asks your name (shows the name converter).|greet.elf
+bsdgreet|BSD Hello|FreeBSD|A FreeBSD-style program printing a message.|bsdhello.elf

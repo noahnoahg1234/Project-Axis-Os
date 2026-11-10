@@ -18,6 +18,7 @@ static inline uint32_t htonl(uint32_t v) {
 uint8_t net_mac[6];
 uint32_t net_ip, net_mask, net_gw, net_dns; /* host byte order */
 static bool nic_ok, configured;
+static bool use_dhcp = true;
 static char nic_name[32];
 static uint32_t rx_packets, tx_packets;
 
@@ -663,7 +664,23 @@ bool net_init(void) {
 
 bool net_renew(void) {
     if (!nic_ok) return false;
-    return dhcp();
+    use_dhcp = true;
+    bool ok = dhcp();
+    if (!ok) {
+        net_ip = ip4(10, 0, 2, 15);
+        net_mask = ip4(255, 255, 255, 0);
+        net_gw = ip4(10, 0, 2, 2);
+        net_dns = ip4(10, 0, 2, 3);
+        configured = true;
+    }
+    return ok;
+}
+bool net_is_dhcp(void) { return use_dhcp; }
+void net_set_dhcp(void) { use_dhcp = true; net_renew(); }
+void net_set_static(uint32_t ip, uint32_t mask, uint32_t gw, uint32_t dns) {
+    use_dhcp = false;
+    net_ip = ip; net_mask = mask; net_gw = gw; net_dns = dns;
+    configured = true;
 }
 
 int net_ping(uint32_t ip, uint16_t seq, uint32_t timeout_ms) {

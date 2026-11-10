@@ -620,11 +620,16 @@ static int run_argv(int argc, char **argv) {
     if (!c) {
         /* a script file typed by name: ./x.sh, x.bat */
         size_t nl = strlen(name);
-        if ((nl > 3 && (!strcasecmp(name + nl - 3, ".sh") || !strcasecmp(name + nl - 4, ".bat") || !strcasecmp(name + nl - 4, ".cmd"))) ||
-            !strncmp(name, "./", 2)) {
-            int id = fs_resolve(!strncmp(name, "./", 2) ? name + 2 : name, fs_cwd);
-            if (id >= 0 && fs_nodes[id].type == FT_FILE) return script_run(name, argc, argv);
+        bool dotslash = !strncmp(name, "./", 2);
+        const char *rp = dotslash ? name + 2 : name;
+        if ((nl > 3 && (!strcasecmp(name + nl - 3, ".sh") || !strcasecmp(name + nl - 4, ".bat") || !strcasecmp(name + nl - 4, ".cmd"))) || dotslash) {
+            int id = fs_resolve(rp, fs_cwd);
+            if (id >= 0 && fs_nodes[id].type == FT_FILE) {
+                if (compat_is_program(rp)) return compat_run(rp, argc, argv);
+                return script_run(name, argc, argv);
+            }
         }
+        if (compat_is_program(name)) return compat_run(name, argc, argv);
         if (adv_mode || cfg.autocorrect == AC_OFF) {
             not_found(name);
             return 127;

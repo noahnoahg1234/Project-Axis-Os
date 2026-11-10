@@ -90,6 +90,7 @@ void kmain(void) {
     heap_init(0x200000, heap_end);
     idt_init();
     kbd_init();
+    mouse_init();
     irq_on();
 
     if (cur_os == OS_WINDOWS) windows_splash();
@@ -106,6 +107,7 @@ void kmain(void) {
     boot_line(line);
     boot_line("Interrupts, PIC and 100 Hz timer initialised");
     boot_line("PS/2 keyboard ready");
+    if (mouse_present()) boot_line("PS/2 mouse ready");
     if (serial_present()) boot_line("Serial console on COM1 (115200 8N1)");
     if (ata_init()) {
         snprintf(line, sizeof line, "Disk: %s (%u MB)", ata_model(), ata_sectors() / 2048);

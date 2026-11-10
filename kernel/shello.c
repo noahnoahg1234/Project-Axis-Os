@@ -53,6 +53,7 @@ static void help(void) {
     up(" COPY <A> <B> COPY A FILE       WHERE      CURRENT DIR\n");
     up(" TIME         DATE AND TIME     MEM        MEMORY\n");
     up(" RUN <CMD>    RUN AXSH COMMAND  BEEP       SPEAKER BEEP\n");
+    up(" DESKTOP      RETRO DESKTOP     CLS        CLEAR SCREEN\n");
     up(" TINT         CHANGE COLOUR     CLS        CLEAR SCREEN\n");
     up(" BYE          BACK TO AXSH\n");
 }
@@ -168,6 +169,10 @@ int shello_run(void) {
             uint32_t total, used;
             heap_stats(&total, &used, NULL);
             upf("%u BYTES FREE OF %u\n", total - used, total);
+        } else if (!strcasecmp(c, "desktop") || !strcasecmp(c, "gui")) {
+            desktop_run();
+            banner();
+            ok = false;
         } else if (!strcasecmp(c, "beep")) {
             beep();
         } else if (!strcasecmp(c, "tint")) {

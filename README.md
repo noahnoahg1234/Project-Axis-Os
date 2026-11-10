@@ -24,8 +24,15 @@ look, and lets you use all of them together.
 | **Advanced mode** | Harder to use, more powerful: no autocorrect, no confirmations, terse `?` errors, a root prompt (`#`), a hex view in the explorer, and expert commands (`peek`, `poke`, `inb`, `outb`, `sector`, `cpuid`, `heap`, `dmesg`, `hexdump`, `format`, `panic`). Turn it on with `advanced on`, `su`, `sudo <cmd>`, or the A key in the boot menu. |
 | **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks and saving pages. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
 | **Networking** | Intel e1000 driver with DHCP, DNS, TCP and HTTP. Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
-| **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), Guess the Number, Todo List, Unit Converter. Online repositories (press A) add more apps downloaded over http. Installed apps run by typing their name; `apps` lists them. |
+| **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), Guess the Number, Todo List, Unit Converter. Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
+| **Compatibility layer** | Runs small 32-bit **Linux and FreeBSD** command-line programs (ELF, built with `gcc -pie`). Download one and run it by name, e.g. `wget http://.../hello` then `./hello`. See `programs/`. Windows `.exe` is not supported. |
+| **High Power mode** | `highpower on` gives a running program a much larger memory arena so heavier programs fit. It raises the memory limit only - it cannot make the CPU itself faster. |
+| **Name converter** | Each program is told which system it is on: a Linux program sees "Linux", a FreeBSD program sees "FreeBSD" (via `uname` / `sysctl`). `osname auto\|linux\|windows\|freebsd` overrides what every program is told. |
+| **Retro desktop** | `desktop` (or `desktop` inside Shello): a text-mode, mouse-driven desktop in the style of the DOS Shell / Windows 3.1 - clickable app icons, a Start menu and a clock. Works with the keyboard too. |
+| **Network settings** | `netconf` (or the Network desktop icon): choose automatic (DHCP) or a static IP, mask, gateway and DNS, and reconnect. |
+| **Archiver (AxisRAR)** | `axar` (also `winrar`): pack files and folders into one compressed `.axar` archive and extract them. `axar a backup.axar folder`, `axar x backup.axar`, `axar l backup.axar`. |
+| **AI assistant** | `assistant` (also `ai`): a small offline helper built into AxisOS - no internet or API key. Ask how to do things in plain words ("how do I copy a file"), and it can run actions for you ("open the browser"). |
 | **Scripts** | `.sh` / `.bat` files run with `sh file` or by name. Besides normal commands they support `:label`, `goto`, `if A == B then ...`, `input VAR prompt`, `let VAR = expr`, `random VAR max` and `pause`. Store apps are written this way. |
 | **Unified filesystem** | One case-insensitive tree with `/home/user`, `C:\Users\user`, `/Windows`, `/usr/local` and more. It is saved to the AxisOS disk, so files and settings persist across reboots. |
 
@@ -44,6 +51,10 @@ make
 ```bash
 make run
 ```
+
+To give AxisOS a network card (for the browser, App Store and downloads), the
+Makefile's `run` target already adds QEMU's default e1000. On your own command
+line use `-nic user,model=e1000`.
 
 `make run` opens a QEMU window and also mirrors the console on your terminal
 (serial). `make run-nographic` uses the terminal only.
@@ -115,12 +126,19 @@ kernel/browser.c    text web browser
 kernel/store.c      App Store, installed apps, script interpreter
 kernel/games.c      Calculator, Minesweeper, Paint, Snake, Clock, Task Monitor
 kernel/shello.c     Shello retro shell
+kernel/desktop.c    retro text-mode mouse desktop
+kernel/compat.c     Linux/FreeBSD ELF loader + system-call layer
+kernel/mouse.c      PS/2 mouse driver
+kernel/assistant.c  offline AI assistant
+kernel/archiver.c   AxisRAR (.axar) archiver
+kernel/netconf.c    network settings screen
 kernel/editor.c     text editor
 kernel/apps.c       settings app, pager, dialogs
 kernel/*.c          console, keyboard, ATA disk, RTC, serial, interrupts, heap
 tools/mkimage.py    builds the disk image
 tools/smoketest.py  automated QEMU test
-store/              sample online app repository
+store/              sample online app repository (apps + Linux/FreeBSD programs)
+programs/           sample Linux/FreeBSD programs and how to build them
 ```
 
 ### Disk layout

@@ -1848,6 +1848,51 @@ static int c_runscript(int argc, char **argv) {
     return script_run(argv[1], argc - 1, argv + 1);
 }
 
+
+static int c_netconf(int argc, char **argv) {
+    (void)argc; (void)argv;
+    if (con_capturing()) return 1;
+    return netconf_run();
+}
+static int c_desktop(int argc, char **argv) {
+    (void)argc; (void)argv;
+    if (con_capturing()) return 1;
+    return desktop_run();
+}
+static int c_ai(int argc, char **argv) {
+    (void)argc; (void)argv;
+    if (con_capturing()) return 1;
+    return ai_run();
+}
+static int c_axar(int argc, char **argv) { return axar_cmd(argc, argv); }
+static int c_highpower(int argc, char **argv) {
+    if (argc > 1) compat_high_power = !strcasecmp(argv[1], "on") || !strcasecmp(argv[1], "1") || !strcasecmp(argv[1], "enable");
+    else compat_high_power = !compat_high_power;
+    PRINTC(theme.accent, "High Power mode is %s.\n", compat_high_power ? "ON (programs get a large memory arena)" : "off");
+    if (compat_high_power) PRINTC(theme.dim, "Note: this raises the memory limit for programs; it cannot speed up the CPU itself.\n");
+    return 0;
+}
+static int c_osname(int argc, char **argv) {
+    static const char *names[] = {"the app's own system", "Linux", "Windows", "FreeBSD"};
+    if (argc > 1) {
+        if (!strcasecmp(argv[1], "auto") || !strcasecmp(argv[1], "app")) compat_report_os = -1;
+        else if (strcasestr(argv[1], "lin")) compat_report_os = OS_LINUX;
+        else if (strcasestr(argv[1], "win")) compat_report_os = OS_WINDOWS;
+        else if (strcasestr(argv[1], "free") || strcasestr(argv[1], "bsd")) compat_report_os = OS_FREEBSD;
+        else { kprintf("usage: osname auto|linux|windows|freebsd\n"); return 1; }
+    }
+    kprintf("Programs are told they are running on: %s\n", compat_report_os < 0 ? names[0] : names[compat_report_os + 1]);
+    return 0;
+}
+static int c_runprog(int argc, char **argv) {
+    if (argc < 2) { kprintf("usage: %s program [args]\n", argv[0]); return 1; }
+    if (con_capturing()) return 1;
+    if (!compat_is_program(argv[1])) {
+        /* maybe it's a path; let compat_run report the real reason */
+    }
+    return compat_run(argv[1], argc - 1, argv + 1);
+}
+
 /* ======================================================= table ========== */
 const command_t commands[] = {
     /* linux      windows      freebsd      aliases                       fn            usage                          description */
@@ -1886,6 +1931,13 @@ const command_t commands[] = {
     {"browser",   "msedge",    "browser",   "web|lynx|w3m|links|firefox|edge|iexplore|www", c_browser, "browser [url | search words]", "Text web browser", 0},
     {"store",     "store",     "pkg",       "appstore|apt|winget|ms-store|software", c_store, "store",                 "App Store: find and install apps", 0},
     {"apps",      "apps",      "apps",      "installed",                  c_apps,       "apps",                        "List installed apps", 0},
+    {"desktop",   "desktop",   "desktop",   "gui|start|wm",               c_desktop,    "desktop",                     "Open the retro mouse desktop", 0},
+    {"assistant", "assistant", "assistant", "ai|helper|help-me|clippy|cortana", c_ai,    "assistant",                   "Axis Assistant (offline helper)", 0},
+    {"netconf",   "netsh",     "netconf",   "network-setup|wifi|netsetup", c_netconf,    "netconf",                     "Network settings (IP, DHCP)", 0},
+    {"axar",      "winrar",    "axar",      "rar|archive|tar|zip|unzip|7z", c_axar,      "axar a|x|l archive files...", "AxisRAR archiver (pack/extract)", 0},
+    {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
+    {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},
+    {"runprog",   "runprog",   "runprog",   "linux|wine|exec|launch",     c_runprog,    "runprog ./program [args]",    "Run a Linux/FreeBSD program", 0},
     {"shello",    "shello",    "shello",    "",                           c_shello,     "shello",                      "Shello: the retro shell", 0},
     {"sh",        "call",      "sh",        "run|source|start",           c_runscript,  "sh script.sh | call script.bat", "Run a script file", 0},
     {"clear",     "cls",       "clear",     "reset",                      c_clear,      "clear",                       "Clear the screen", 0},

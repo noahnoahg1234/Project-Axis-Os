@@ -3,6 +3,7 @@
 
 int cur_os = OS_LINUX;
 bool adv_mode = false;
+bool compat_high_power = false;
 
 static const char *names[OS_COUNT] = {"Axis/Linux", "Axis/Windows", "Axis/FreeBSD"};
 static const char *shorts[OS_COUNT] = {"linux", "windows", "freebsd"};

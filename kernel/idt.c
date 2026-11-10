@@ -12,6 +12,7 @@ typedef struct __attribute__((packed)) {
 } idt_ptr_t;
 
 extern uint32_t isr_table[48];
+extern uint32_t isr128;
 static idt_entry_t idt[256];
 static void (*irq_handlers[16])(regs_t *);
 volatile uint32_t ticks;
@@ -48,7 +49,7 @@ static void pic_remap(void) {
     outb(0x21, 0x01); io_wait();
     outb(0xA1, 0x01); io_wait();
     outb(0x21, 0xF8); /* enable IRQ0 (timer), IRQ1 (keyboard), IRQ2 (cascade) */
-    outb(0xA1, 0xFF);
+    outb(0xA1, 0xEF); /* enable IRQ12 (PS/2 mouse) on the slave PIC */
 }
 
 static void timer_irq(regs_t *r) {
@@ -58,6 +59,7 @@ static void timer_irq(regs_t *r) {
 
 void idt_init(void) {
     for (int i = 0; i < 48; i++) idt_set(i, isr_table[i]);
+    idt_set(0x80, (uint32_t)&isr128); /* Linux/FreeBSD syscall gate */
     idt_ptr_t p = {sizeof idt - 1, (uint32_t)idt};
     __asm__ volatile("lidt %0" ::"m"(p));
     pic_remap();

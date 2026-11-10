@@ -145,6 +145,13 @@ enum {
 };
 #define KEY_CTRL(c) ((c) & 0x1F)
 void kbd_init(void);
+void mouse_init(void);
+bool mouse_present(void);
+void mouse_pos(int *x, int *y);
+uint8_t mouse_buttons(void);
+bool mouse_poll_moved(void);
+void mouse_set(int x, int y);
+int desktop_run(void);
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
 bool kbd_ctrl_c_pending(void);
@@ -316,6 +323,14 @@ extern uint8_t net_mac[6];
 extern uint32_t net_ip, net_mask, net_gw, net_dns;
 bool net_init(void);
 bool net_renew(void);
+bool net_is_dhcp(void);
+void net_set_dhcp(void);
+void net_set_static(uint32_t ip, uint32_t mask, uint32_t gw, uint32_t dns);
+int netconf_run(void);
+int ai_run(void);
+int archiver_run(void);
+int axar_cmd(int argc, char **argv);
+int desktop_run(void);
 bool net_present(void);
 bool net_up(void);
 const char *net_nic_name(void);
@@ -336,6 +351,11 @@ int shello_run(void);
 int script_run(const char *path, int argc, char **argv);
 bool app_try_run(int argc, char **argv); /* installed app by name */
 int apps_list(void);
+/* compat.c - run Linux/FreeBSD ELF programs */
+int compat_run(const char *path, int argc, char **argv);
+bool compat_is_program(const char *path);
+extern bool compat_high_power;
+extern int compat_report_os;
 int explorer_run(const char *start);
 int editor_run(const char *path);
 int settings_run(void);

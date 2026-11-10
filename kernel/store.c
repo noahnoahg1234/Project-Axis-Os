@@ -155,7 +155,7 @@ static int install_app(const app_t *a, char *msg, size_t mn) {
     }
     char *script = NULL;
     uint32_t slen = 0;
-    bool fetched = false;
+    bool fetched = false, is_program = false;
     if (!a->native) {
         const char *b = builtin_script(a->id);
         if (b) {
@@ -172,6 +172,7 @@ static int install_app(const app_t *a, char *msg, size_t mn) {
             script = r.body;
             slen = r.len;
             fetched = true;
+            is_program = r.len >= 4 && !memcmp(r.body, "\x7f""ELF", 4);
         } else {
             snprintf(msg, mn, "App has no download address");
             return -1;
@@ -184,11 +185,12 @@ static int install_app(const app_t *a, char *msg, size_t mn) {
         snprintf(msg, mn, "Install failed: %s", fs_strerror(d));
         return -1;
     }
+    const char *type = a->native ? "native" : (is_program ? "program" : "script");
     char info[400];
     snprintf(info, sizeof info, "name=%s\ncategory=%s\ntype=%s\nsource=%s\ndescription=%s\n", a->name, a->category,
-             a->native ? "native" : "script", a->url[0] ? a->url : a->source, a->desc);
+             type, a->url[0] ? a->url : a->source, a->desc);
     write_file(d, "app.info", info, (uint32_t)strlen(info));
-    if (script) write_file(d, "main.sh", script, slen);
+    if (script) write_file(d, is_program ? "main.elf" : "main.sh", script, slen);
     if (fetched) kfree(script);
     if (cfg.autosave) fs_save();
     snprintf(msg, mn, "Installed %s. Type '%s' at the prompt to run it.", a->name, a->id);
@@ -240,6 +242,10 @@ int run_installed(const char *id, int argc, char **argv) {
         return 0;
     }
     char path[96];
+    if (!strcmp(type, "program")) {
+        snprintf(path, sizeof path, "/Apps/%s/main.elf", fs_nodes[d].name);
+        return compat_run(path, argc, argv);
+    }
     snprintf(path, sizeof path, "/Apps/%s/main.sh", fs_nodes[d].name);
     return script_run(path, argc, argv);
 }
@@ -367,8 +373,8 @@ static void refresh_online(char *msg, size_t mn) {
 }
 
 /* ------------------------------------------------------------ store UI -- */
-static const char *cats[] = {"All", "Windows-style", "Linux-style", "Games", "Tools", "Online", "Installed"};
-#define NCATS 7
+static const char *cats[] = {"All", "Programs", "Games", "Tools", "Windows-style", "Linux-style", "Online", "Installed"};
+#define NCATS 8
 
 static int build_list(int cat, const char *filter, const app_t **out, int max) {
     int n = 0;
@@ -379,8 +385,9 @@ static int build_list(int cat, const char *filter, const app_t **out, int max) {
             bool ok;
             switch (cat) {
             case 0: ok = true; break;
-            case 5: ok = pass == 1; break;
-            case 6: ok = installed(a->id); break;
+            case 1: ok = strcasestr(a->category, "Linux") || strcasestr(a->category, "Windows") || strcasestr(a->category, "FreeBSD") || strcasestr(a->category, "Program"); break;
+            case 6: ok = pass == 1; break;
+            case 7: ok = installed(a->id); break;
             default: ok = !strcasecmp(a->category, cats[cat]);
             }
             if (ok && filter[0] && !strcasestr(a->name, filter) && !strcasestr(a->desc, filter) && !strcasestr(a->id, filter)) ok = false;
@@ -471,7 +478,7 @@ int store_run(void) {
                         if (cfg.autosave) fs_save();
                     }
                     refresh_online(msg, sizeof msg);
-                    cat = 5;
+                    cat = 6;
                     sel = top = 0;
                 }
             }

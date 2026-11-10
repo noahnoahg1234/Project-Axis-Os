@@ -47,10 +47,10 @@ $(IMG): build/stage1.bin build/stage2.bin build/kernel.bin tools/mkimage.py
 	python3 tools/mkimage.py $@ build/stage1.bin build/stage2.bin build/kernel.bin
 
 run: $(IMG)
-	$(QEMU) -drive file=$(IMG),format=raw,if=ide -m 64 -serial stdio
+	$(QEMU) -drive file=$(IMG),format=raw,if=ide -m 64 -nic user,model=e1000 -serial stdio
 
 run-nographic: $(IMG)
-	$(QEMU) -drive file=$(IMG),format=raw,if=ide -m 64 -display none -serial stdio
+	$(QEMU) -drive file=$(IMG),format=raw,if=ide -m 64 -nic user,model=e1000 -display none -serial stdio
 
 clean:
 	rm -f build/*.o build/*.bin build/*.elf build/*.img
