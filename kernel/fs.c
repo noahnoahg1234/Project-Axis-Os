@@ -243,7 +243,7 @@ void fs_path_unix(int id, char *buf, size_t n) {
 }
 
 void fs_path(int id, char *buf, size_t n) {
-    if (cur_os != OS_WINDOWS) {
+    if (!os_win_style()) {
         fs_path_unix(id, buf, n);
         return;
     }
@@ -255,6 +255,7 @@ void fs_path(int id, char *buf, size_t n) {
 }
 
 int fs_home(void) {
+    if (cur_os == OS_DOS) return FS_ROOT; /* MS-DOS: you live at C:\ */
     const char *base = cur_os == OS_WINDOWS ? "Users" : "home";
     int b = fs_lookup(FS_ROOT, base);
     if (b < 0) b = fs_create(FS_ROOT, base, FT_DIR);
@@ -458,7 +459,7 @@ void fs_format(void) {
     snprintf(b, sizeof b, "%s/Downloads", home);
     mkdirp(b);
 
-    mkf("/etc", "motd", "Welcome to AxisOS - one system, three personalities.\n", 0);
+    mkf("/etc", "motd", "Welcome to AxisOS - one system, four personalities.\n", 0);
     mkf("/etc", "os-release",
         "NAME=\"AxisOS\"\nVERSION=\"" AXIS_VERSION "\"\nID=axis\nPRETTY_NAME=\"AxisOS " AXIS_VERSION "\"\n"
         "PERSONALITIES=\"linux windows freebsd\"\n", 0);

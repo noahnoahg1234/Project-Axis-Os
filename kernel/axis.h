@@ -177,7 +177,7 @@ const char *rtc_month_name(int m);
 #define CONFIG_LBA 17
 #define FS_LBA 2048
 #define FS_SECTORS 512
-enum { OS_LINUX = 0, OS_WINDOWS = 1, OS_FREEBSD = 2, OS_COUNT = 3 };
+enum { OS_LINUX = 0, OS_WINDOWS = 1, OS_FREEBSD = 2, OS_DOS = 3, OS_COUNT = 4 };
 enum { AC_OFF = 0, AC_SUGGEST = 1, AC_AUTO = 2 };
 typedef struct __attribute__((packed)) {
     char magic[4];      /* "AXCF" */
@@ -213,6 +213,9 @@ extern bootinfo_t boot;
 extern int cur_os;
 extern bool adv_mode;
 const char *os_name(int os);
+bool os_win_style(void);   /* Windows or DOS: C:\ and backslashes, dir/type/del */
+bool os_dos(void);         /* MS-DOS personality */
+bool os_unix_style(void);  /* Linux or FreeBSD */
 const char *os_short(int os);
 void sys_reboot(void);
 void sys_poweroff(void);
@@ -333,6 +336,8 @@ int axar_cmd(int argc, char **argv);
 int desktop_run(void);
 bool net_present(void);
 bool net_up(void);
+bool net_online(void);
+bool net_link_up(void);
 const char *net_nic_name(void);
 void net_stats(uint32_t *rx, uint32_t *tx);
 void net_poll(void);

@@ -120,6 +120,19 @@ out = vm.run("os linux", "$")
 check("switch personality at runtime", "Axis/Linux" in out, out)
 vm.close()
 
+# ------------------------------------------------------------- MS-DOS ------
+vm, ok = boot("4", ">")
+check("boots into Axis/DOS from the boot menu", ok)
+out = vm.run("ver", ">")
+check("DOS version banner", "AxisDOS" in out, out)
+out = vm.run("dir", ">")
+check("DOS dir works", "<DIR>" in out or "File(s)" in out, out)
+out = vm.run("nope", ">")
+check("DOS 'Bad command or file name' error", "Bad command" in out, out)
+out = vm.run("echo hi > d.txt & type d.txt", ">")
+check("DOS redirection and type", "hi" in out, out)
+vm.close()
+
 # ------------------------------------- network, browser, store, shello ----
 # serve the sample app repository (store/) on the host; QEMU's user network
 # reaches the host as 10.0.2.2

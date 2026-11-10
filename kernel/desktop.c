@@ -128,7 +128,7 @@ static void launch(int i, bool *leave) {
 }
 
 static void about(void) {
-    tui_message("About AxisOS", "AxisOS " AXIS_VERSION " - one system, three personalities. Desktop, browser, App Store and more.");
+    tui_message("About AxisOS", "AxisOS " AXIS_VERSION " - one system, four personalities. Desktop, browser, App Store and more.");
 }
 
 int desktop_run(void) {

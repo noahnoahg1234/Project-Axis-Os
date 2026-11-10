@@ -23,7 +23,7 @@ org 0x7E00
 %define BOOTINFO       0x0500
 %define CONFIG_BUF     0x0600
 
-%define OS_COUNT       3
+%define OS_COUNT       4
 
 stage2:
     xor ax, ax
@@ -211,7 +211,7 @@ draw_menu:
 .frame_mid:
     call frame_side
     inc dh
-    cmp dh, 17
+    cmp dh, 18
     jb .frame_mid
     call frame_bottom
 
@@ -529,9 +529,9 @@ k_chunk:   dw 0
 k_lba:     dd 0
 dot_pos:   dw (3*80 + 2)*2
 
-entry_names: dw s_linux, s_windows, s_freebsd
-entry_color: dw 0x0A, 0x0B, 0x0C
-entry_sel:   dw 0x2F, 0x1F, 0x4F
+entry_names: dw s_linux, s_windows, s_freebsd, s_dos
+entry_color: dw 0x0A, 0x0B, 0x0C, 0x0E
+entry_sel:   dw 0x2F, 0x1F, 0x4F, 0x60
 
 s_title:     db "AxisBoot  -  Unified Boot Manager", 0
 s_version:   db "AxisOS 1.0  (x86)", 0
@@ -549,12 +549,13 @@ s_blank_bar: db "                                                               
 s_linux:     db " 1  Axis/Linux     bash-style shell, ls/cat/grep, ~ paths    ", 0
 s_windows:   db " 2  Axis/Windows   cmd-style shell, dir/type/copy, C:\ paths ", 0
 s_freebsd:   db " 3  Axis/FreeBSD   BSD sh/csh shell, sysctl, ee, chflags     ", 0
+s_dos:       db " 4  Axis/DOS       MS-DOS style, DIR/TYPE/COPY, C:\ prompt    ", 0
 s_adv_off:   db "[ ] Advanced mode  (A to toggle - expert tools, no hand-holding)", 0
 s_adv_on:    db "[X] Advanced mode  (A to toggle - expert tools, no hand-holding)", 0
 s_auto:      db "Starting the selected system in", 0
 s_secs:      db "seconds...", 0
 s_manual:    db "Countdown stopped. Press Enter to boot.", 0
-s_help:      db "Up/Down: select   Enter: boot   1-3: quick boot   A: advanced   R: reboot", 0
+s_help:      db "Up/Down: select   Enter: boot   1-4: quick boot   A: advanced   R: reboot", 0
 s_loading:   db "AxisBoot: loading AxisOS kernel", 0
 s_diskerr:   db " Disk read error while loading the kernel. System halted. ", 0
 

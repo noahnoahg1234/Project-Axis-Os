@@ -91,7 +91,7 @@ static int c_help(int argc, char **argv) {
         for (int i = 0; i < command_count; i++) {
             const command_t *c = &commands[i];
             if (c->flags & CMD_HIDDEN) continue;
-            const char *n = cur_os == OS_WINDOWS && c->win[0] ? c->win : (cur_os == OS_FREEBSD && c->bsd[0] ? c->bsd : (c->lin[0] ? c->lin : c->win));
+            const char *n = os_win_style() && c->win[0] ? c->win : (cur_os == OS_FREEBSD && c->bsd[0] ? c->bsd : (c->lin[0] ? c->lin : c->win));
             kprintf("%-10s", n);
             if (++col % 8 == 0) kprintf("\n");
         }
@@ -113,7 +113,8 @@ static int c_help(int argc, char **argv) {
 static int c_uname(int argc, char **argv) {
     const char *n = argv[0];
     if (!strcasecmp(n, "ver")) {
-        kprintf("\nAxisOS [Version %s] (%s personality)\n", AXIS_VERSION, os_name(cur_os));
+        if (cur_os == OS_DOS) kprintf("\nAxisDOS Version %s\n(C)opyright AxisOS. Compatible with MS-DOS commands.\n", AXIS_VERSION);
+        else kprintf("\nAxisOS [Version %s] (%s personality)\n", AXIS_VERSION, os_name(cur_os));
         return 0;
     }
     if (!strcasecmp(n, "freebsd-version")) {
@@ -121,7 +122,7 @@ static int c_uname(int argc, char **argv) {
         return 0;
     }
     bool all = has_flag(argc, argv, 'a');
-    const char *sys = cur_os == OS_WINDOWS ? "AxisOS-Windows" : (cur_os == OS_FREEBSD ? "AxisOS-FreeBSD" : "AxisOS-Linux");
+    const char *sys = cur_os == OS_DOS ? "AxisDOS" : cur_os == OS_WINDOWS ? "AxisOS-Windows" : (cur_os == OS_FREEBSD ? "AxisOS-FreeBSD" : "AxisOS-Linux");
     if (all)
         kprintf("%s %s %s-axis #1 %s i686 %s\n", sys, cfg.hostname, AXIS_VERSION, cur_os == OS_FREEBSD ? "AXIS" : "SMP", os_name(cur_os));
     else if (has_flag(argc, argv, 'r'))
@@ -160,17 +161,18 @@ static int c_fetch(int argc, char **argv) {
         kprintf("Disk:                      %s\n", ata_present() ? ata_model() : "none (no persistence)");
         return 0;
     }
-    static const char *logo[3][7] = {
+    static const char *logo[4][7] = {
         {"     .--.     ", "    |o_o |    ", "    |:_/ |    ", "   //   \\ \\   ", "  (|     | )  ", " /'\\_   _/`\\  ", " \\___)=(___/  "},
         {" ##### ##### ", " ##### ##### ", " ##### ##### ", "             ", " ##### ##### ", " ##### ##### ", " ##### ##### "},
-        {" /\\,-'''''-,/\\", " \\_)       (_/", " |           |", " |           |", "  ;         ; ", "   '-_____-'  ", "              "}};
+        {" /\\,-'''''-,/\\", " \\_)       (_/", " |           |", " |           |", "  ;         ; ", "   '-_____-'  ", "              "},
+        {" +----------+ ", " | C:\\>_    | ", " |          | ", " |  AxisDOS | ", " |          | ", " +----------+ ", "   ========   "}};
     uint8_t lc = cur_os == OS_WINDOWS ? theme.accent : (cur_os == OS_FREEBSD ? ATTR(C_LRED, theme.normal >> 4) : theme.accent);
     char lines[8][80];
     snprintf(lines[0], 80, "%s@%s", env_get("USER"), cfg.hostname);
     snprintf(lines[1], 80, "OS:      AxisOS %s (%s)", AXIS_VERSION, os_name(cur_os));
     snprintf(lines[2], 80, "Kernel:  axis %s i686", AXIS_VERSION);
     snprintf(lines[3], 80, "Uptime:  %u min %u s", up / 60, up % 60);
-    snprintf(lines[4], 80, "Shell:   axsh (%s)", cur_os == OS_WINDOWS ? "cmd" : (cur_os == OS_FREEBSD ? "csh" : "bash"));
+    snprintf(lines[4], 80, "Shell:   axsh (%s)", cur_os == OS_DOS ? "command.com" : cur_os == OS_WINDOWS ? "cmd" : (cur_os == OS_FREEBSD ? "csh" : "bash"));
     snprintf(lines[5], 80, "CPU:     %.40s", brand);
     snprintf(lines[6], 80, "Memory:  %u MB, files: %d (%u bytes)", mem_total_kb() / 1024, nodes, bytes);
     for (int i = 0; i < 7; i++) {
@@ -190,7 +192,7 @@ static int c_date(int argc, char **argv) {
         else kprintf("The current time is: %d:%02d:%02d %s\n", h12, t.min, t.sec, t.hour < 12 ? "AM" : "PM");
         return 0;
     }
-    if (cur_os == OS_WINDOWS) {
+    if (os_win_style()) {
         kprintf("The current date is: %s %02d/%02d/%04d\n", rtc_wday_name(t.wday), t.month, t.day, t.year);
         return 0;
     }
@@ -218,7 +220,7 @@ static int c_uptime(int argc, char **argv) {
 static int c_whoami(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    if (cur_os == OS_WINDOWS) kprintf("%s\\%s\n", cfg.hostname, env_get("USERNAME"));
+    if (os_win_style()) kprintf("%s\\%s\n", cfg.hostname, env_get("USERNAME"));
     else kprintf("%s\n", env_get("USER"));
     return 0;
 }
@@ -294,7 +296,7 @@ static int c_df(int argc, char **argv) {
     }
     kprintf("Filesystem     1K-blocks   Used  Avail Capacity  Mounted on\n");
     kprintf("axisfs         %9u %6u %6u %7u%%   %s\n", cap / 1024, (bytes + 1023) / 1024, (cap - bytes) / 1024,
-            bytes * 100 / cap, cur_os == OS_WINDOWS ? "C:\\" : "/");
+            bytes * 100 / cap, os_win_style() ? "C:\\" : "/");
     kprintf("  inodes: %d used of %d, persistence: %s\n", nodes, FS_MAX_NODES, storage_ready() ? "disk" : "RAM only");
     return 0;
 }
@@ -531,7 +533,7 @@ static int c_cd(int argc, char **argv) {
     for (int i = 1; i < argc; i++)
         if (!(argv[i][0] == '/' && (argv[i][1] == 'd' || argv[i][1] == 'D') && !argv[i][2])) target = argv[i];
     if (!target) {
-        if (cur_os == OS_WINDOWS) {
+        if (os_win_style()) {
             char p[256];
             fs_path(fs_cwd, p, sizeof p);
             kprintf("%s\n", p);
@@ -613,8 +615,8 @@ static int c_echo(int argc, char **argv) {
     int i = 1;
     bool nl = true;
     if (argc > 1 && !strcmp(argv[1], "-n")) nl = false, i++;
-    if (argc == 2 && cur_os == OS_WINDOWS && (!strcasecmp(argv[1], "on") || !strcasecmp(argv[1], "off"))) return 0;
-    if (argc == 1 && cur_os == OS_WINDOWS) {
+    if (argc == 2 && os_win_style() && (!strcasecmp(argv[1], "on") || !strcasecmp(argv[1], "off"))) return 0;
+    if (argc == 1 && os_win_style()) {
         kprintf("ECHO is on.\n");
         return 0;
     }
@@ -628,7 +630,7 @@ static int c_echo(int argc, char **argv) {
 }
 
 static int c_mkdir(int argc, char **argv) {
-    bool parents = has_flag(argc, argv, 'p') || cur_os == OS_WINDOWS;
+    bool parents = has_flag(argc, argv, 'p') || os_win_style();
     int rc = 0;
     for (int i = 1; i < argc; i++) {
         if (is_flag(argv[i])) continue;
@@ -649,7 +651,7 @@ static int c_mkdir(int argc, char **argv) {
                             rc = 1;
                             break;
                         }
-                    } else if (!c && fs_resolve(buf, fs_cwd) >= 0 && cur_os == OS_WINDOWS && !has_flag(argc, argv, 'p')) {
+                    } else if (!c && fs_resolve(buf, fs_cwd) >= 0 && os_win_style() && !has_flag(argc, argv, 'p')) {
                         shell_print_error(E_EXIST, argv[i]);
                         rc = 1;
                     }
@@ -716,7 +718,7 @@ static int delete_match(const char *arg, bool rec, bool force, int *count) {
         if (!strcmp(pat, "*") || !strcmp(pat, "*.*")) {
             char p[256], q[300];
             fs_path(dir, p, sizeof p);
-            snprintf(q, sizeof q, "%s%s*, Are you sure", p, cur_os == OS_WINDOWS ? "\\" : "/");
+            snprintf(q, sizeof q, "%s%s*, Are you sure", p, os_win_style() ? "\\" : "/");
             if (!force && !shell_confirm(q)) return 0;
         }
         static int kids[FS_MAX_NODES];
@@ -773,7 +775,7 @@ static int copy_or_move(int argc, char **argv, bool move) {
     for (int i = 1; i < argc; i++)
         if (!is_flag(argv[i])) args[n++] = argv[i];
     if (n < 2) {
-        if (n == 1 && cur_os == OS_WINDOWS && !move) {
+        if (n == 1 && os_win_style() && !move) {
             args[n++] = (char *)".";
         } else {
             kprintf("usage: %s source ... destination\n", argv[0]);
@@ -817,7 +819,7 @@ static int copy_or_move(int argc, char **argv, bool move) {
         } else
             done++;
     }
-    if (cur_os == OS_WINDOWS && !con_capturing())
+    if (os_win_style() && !con_capturing())
         kprintf("%9d file(s) %s.\n", done, move ? "moved" : "copied");
     return rc;
 }
@@ -865,7 +867,7 @@ static int c_stat(int argc, char **argv) {
         fs_node_t *n = &fs_nodes[id];
         char p[256], t[40];
         fs_path(id, p, sizeof p);
-        fmt_time(n->mtime, t, sizeof t, cur_os == OS_WINDOWS);
+        fmt_time(n->mtime, t, sizeof t, os_win_style());
         kprintf("  File: %s\n  Size: %u\t\tType: %s\n Inode: %d\tParent: %d\n Attrs: %s%s%s%s\nModify: %s\n", p, n->size,
                 n->type == FT_DIR ? "directory" : "regular file", id, n->parent, n->attr & FA_HIDDEN ? "hidden " : "",
                 n->attr & FA_READONLY ? "read-only " : "", n->attr & FA_SYSTEM ? "system " : "", n->attr ? "" : "none", t);
@@ -947,7 +949,7 @@ static int c_tree_rec(int id, char *prefix, int depth, bool files, int *nd, int 
     return 0;
 }
 static int c_tree(int argc, char **argv) {
-    bool files = cur_os != OS_WINDOWS || has_flag(argc, argv, 'f');
+    bool files = !os_win_style() || has_flag(argc, argv, 'f');
     int id = fs_cwd;
     for (int i = 1; i < argc; i++)
         if (!is_flag(argv[i])) {
@@ -959,7 +961,7 @@ static int c_tree(int argc, char **argv) {
     PRINTC(theme.path, "%s\n", p);
     int nd = 0, nf = 0;
     c_tree_rec(id, prefix, 0, files, &nd, &nf);
-    if (cur_os != OS_WINDOWS) kprintf("\n%d directories, %d files\n", nd, nf);
+    if (!os_win_style()) kprintf("\n%d directories, %d files\n", nd, nf);
     return 0;
 }
 
@@ -1209,16 +1211,18 @@ static int c_os(int argc, char **argv) {
     if (!strcasecmp(n, "wsl") || !strcasecmp(n, "bash")) target = OS_LINUX;
     else if (!strcasecmp(n, "cmd") || !strcasecmp(n, "powershell")) target = OS_WINDOWS;
     else if (!strcasecmp(n, "bsd") || !strcasecmp(n, "csh") || !strcasecmp(n, "tcsh")) target = OS_FREEBSD;
+    else if (!strcasecmp(n, "command") || !strcasecmp(n, "command.com") || !strcasecmp(n, "msdos")) target = OS_DOS;
     else if (argc > 1) {
         const char *a = argv[1];
         if (!strncasecmp(a, "lin", 3) || !strcasecmp(a, "l") || !strcasecmp(a, "1")) target = OS_LINUX;
         else if (!strncasecmp(a, "win", 3) || !strcasecmp(a, "w") || !strcasecmp(a, "2")) target = OS_WINDOWS;
         else if (strcasestr(a, "bsd") || !strncasecmp(a, "free", 4) || !strcasecmp(a, "f") || !strcasecmp(a, "3")) target = OS_FREEBSD;
+        else if (!strncasecmp(a, "dos", 3) || strcasestr(a, "msdos") || !strcasecmp(a, "d") || !strcasecmp(a, "4")) target = OS_DOS;
         else {
             /* autocorrect the system name too */
-            const char *names[] = {"linux", "windows", "freebsd"};
+            const char *names[] = {"linux", "windows", "freebsd", "dos"};
             int best = -1, bd = 100;
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 int d = edit_distance(a, names[i]);
                 if (d < bd) bd = d, best = i;
             }
@@ -1227,7 +1231,7 @@ static int c_os(int argc, char **argv) {
     }
     if (target < 0) {
         kprintf("Current system: %s%s\n", os_name(cur_os), adv_mode ? " (advanced mode)" : "");
-        kprintf("usage: os linux | windows | freebsd   (shortcuts: wsl, cmd, bsd)\n");
+        kprintf("usage: os linux | windows | freebsd | dos   (shortcuts: wsl, cmd, bsd, command)\n");
         return argc > 1;
     }
     cur_os = target;
@@ -1435,7 +1439,7 @@ static int c_reboot(int argc, char **argv) {
 static int c_shutdown(int argc, char **argv) {
     if (has_flag(argc, argv, 'r')) return c_reboot(argc, argv);
     power_prepare();
-    if (cur_os == OS_WINDOWS) kprintf("Shutting down...\n");
+    if (os_win_style()) kprintf("Shutting down...\n");
     else kprintf("The system is going down for power-off NOW!\n");
     sleep_ms(300);
     sys_poweroff();
@@ -1673,12 +1677,15 @@ static int c_ifconfig(int argc, char **argv) {
         kprintf("   Physical Address. . . . . . . . : %02X-%02X-%02X-%02X-%02X-%02X\n", net_mac[0], net_mac[1], net_mac[2], net_mac[3], net_mac[4], net_mac[5]);
         kprintf("   IPv4 Address. . . . . . . . . . : %s\n   Subnet Mask . . . . . . . . . . : %s\n", ip, mask);
         kprintf("   Default Gateway . . . . . . . . : %s\n   DNS Servers . . . . . . . . . . : %s\n", gw, dns);
+        kprintf("   Media State . . . . . . . . . . : %s\n", net_link_up() ? "Media connected" : "Media disconnected");
         return 0;
     }
     kprintf("%s: flags=8843<UP,BROADCAST,RUNNING,MULTICAST> mtu 1500\n", cur_os == OS_FREEBSD ? "em0" : "eth0");
     kprintf("        inet %s  netmask %s  gateway %s  dns %s\n", ip, mask, gw, dns);
     kprintf("        ether %02x:%02x:%02x:%02x:%02x:%02x  (%s)\n", net_mac[0], net_mac[1], net_mac[2], net_mac[3], net_mac[4], net_mac[5], net_nic_name());
     kprintf("        RX packets %u  TX packets %u\n", rx, tx);
+    kprintf("        link: %s   internet: %s\n", net_link_up() ? "up" : "down",
+            net_online() ? "reachable" : "not reachable");
     return 0;
 }
 
@@ -1700,7 +1707,7 @@ static int c_ping(int argc, char **argv) {
     }
     char ips[16];
     ip_to_str(ip, ips);
-    bool win = cur_os == OS_WINDOWS;
+    bool win = os_win_style();
     if (win) kprintf("\nPinging %s [%s] with 32 bytes of data:\n", host, ips);
     else kprintf("PING %s (%s): 32 data bytes\n", host, ips);
     int ok = 0;
@@ -1922,7 +1929,7 @@ const command_t commands[] = {
     {"nano",      "edit",      "ee",        "vi|vim|notepad|pico|editor", c_edit,       "nano [file]",                 "Full-screen text editor", 0},
     {"files",     "explorer",  "files",     "fm|mc|nautilus|filemanager", c_explorer,   "explorer [path]",             "AxisOS file explorer", 0},
     {"settings",  "control",   "bsdconfig", "config|setup|preferences",   c_settings,   "settings",                    "Open the settings app", 0},
-    {"os",        "os",        "os",        "switch|wsl|cmd|bsd|bash|powershell|csh|tcsh", c_os, "os linux|windows|freebsd", "Switch the system personality", 0},
+    {"os",        "os",        "os",        "switch|wsl|cmd|bsd|bash|powershell|csh|tcsh|command|command.com|msdos", c_os, "os linux|windows|freebsd|dos", "Switch the system personality", 0},
     {"advanced",  "advanced",  "advanced",  "adv|su|sudo|expert",         c_advanced,   "advanced [on|off] | sudo cmd", "Toggle Advanced mode", 0},
     {"ifconfig",  "ipconfig",  "ifconfig",  "ip|netstat",                 c_ifconfig,   "ifconfig | ipconfig [/renew]", "Show network settings", 0},
     {"ping",      "ping",      "ping",      "",                           c_ping,       "ping [-c N] host",            "Check that a host answers", 0},

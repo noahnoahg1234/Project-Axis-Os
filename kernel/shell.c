@@ -37,13 +37,13 @@ const char *env_get(const char *name) {
         return dyn;
     }
     if (!strcasecmp(name, "USER") || !strcasecmp(name, "USERNAME") || !strcasecmp(name, "LOGNAME"))
-        return adv_mode ? (cur_os == OS_WINDOWS ? "Administrator" : "root") : cfg.username;
+        return adv_mode ? (os_win_style() ? "Administrator" : "root") : cfg.username;
     if (!strcasecmp(name, "HOSTNAME") || !strcasecmp(name, "COMPUTERNAME")) return cfg.hostname;
     if (!strcasecmp(name, "SHELL") || !strcasecmp(name, "COMSPEC"))
-        return cur_os == OS_WINDOWS ? "C:\\Windows\\System32\\cmd.exe" : (cur_os == OS_FREEBSD ? "/bin/csh" : "/bin/bash");
+        return cur_os == OS_DOS ? "C:\\COMMAND.COM" : cur_os == OS_WINDOWS ? "C:\\Windows\\System32\\cmd.exe" : (cur_os == OS_FREEBSD ? "/bin/csh" : "/bin/bash");
     if (!strcasecmp(name, "OS") || !strcasecmp(name, "OSTYPE")) return os_name(cur_os);
     if (!strcasecmp(name, "PATH"))
-        return cur_os == OS_WINDOWS ? "C:\\Windows\\System32;C:\\Windows;C:\\Program Files" : "/bin:/usr/bin:/usr/local/bin";
+        return cur_os == OS_DOS ? "C:\\DOS;C:\\" : cur_os == OS_WINDOWS ? "C:\\Windows\\System32;C:\\Windows;C:\\Program Files" : "/bin:/usr/bin:/usr/local/bin";
     if (!strcasecmp(name, "?") || !strcasecmp(name, "ERRORLEVEL")) {
         snprintf(dyn, sizeof dyn, "%d", last_rc);
         return dyn;
@@ -131,7 +131,7 @@ int alias_set(const char *name, const char *value) {
 void alias_list(void) {
     for (int i = 0; i < MAX_ALIAS; i++)
         if (alias_names[i][0]) {
-            if (cur_os == OS_WINDOWS) kprintf("%s=%s\n", alias_names[i], alias_vals[i]);
+            if (os_win_style()) kprintf("%s=%s\n", alias_names[i], alias_vals[i]);
             else kprintf("alias %s='%s'\n", alias_names[i], alias_vals[i]);
         }
 }
@@ -156,7 +156,7 @@ const char *shell_history_get(int i) {
 static void cwd_display(char *buf, size_t n) {
     char p[256], h[256];
     fs_path(fs_cwd, p, sizeof p);
-    if (cur_os == OS_WINDOWS) {
+    if (os_win_style()) {
         strlcpy(buf, p, n);
         return;
     }
@@ -169,7 +169,7 @@ static void cwd_display(char *buf, size_t n) {
 void shell_prompt_string(char *buf, size_t n) {
     char d[256];
     cwd_display(d, sizeof d);
-    if (cur_os == OS_WINDOWS) snprintf(buf, n, "%s%s>", adv_mode ? "[Admin] " : "", d);
+    if (os_win_style()) snprintf(buf, n, "%s%s>", adv_mode ? "[Admin] " : "", d);
     else if (cur_os == OS_FREEBSD) snprintf(buf, n, "%s@%s:%s %c ", env_get("USER"), cfg.hostname, d, adv_mode ? '#' : '%');
     else snprintf(buf, n, "%s@%s:%s%c ", env_get("USER"), cfg.hostname, d, adv_mode ? '#' : '$');
 }
@@ -178,7 +178,7 @@ static void print_prompt(void) {
     char d[256];
     cwd_display(d, sizeof d);
     uint8_t save = con_get_attr();
-    if (cur_os == OS_WINDOWS) {
+    if (os_win_style()) {
         if (adv_mode) {
             con_set_attr(theme.error);
             con_write("[Admin] ");
@@ -265,7 +265,7 @@ static int collect_completions(const char *word, bool cmd, char out[][FS_NAME_MA
     for (int i = 0; i < k && n < max; i++)
         if (!strncasecmp(fs_nodes[kids[i]].name, base, strlen(base))) {
             strlcpy(out[n], fs_nodes[kids[i]].name, FS_NAME_MAX - 1);
-            if (fs_nodes[kids[i]].type == FT_DIR) strcat(out[n], cur_os == OS_WINDOWS ? "\\" : "/");
+            if (fs_nodes[kids[i]].type == FT_DIR) strcat(out[n], os_win_style() ? "\\" : "/");
             n++;
         }
     return n;
@@ -408,7 +408,7 @@ void shell_print_error(int code, const char *what) {
     con_set_attr(theme.error);
     if (adv_mode) {
         kprintf("E%d %s\n", -code, what ? what : "");
-    } else if (cur_os == OS_WINDOWS) {
+    } else if (os_win_style()) {
         switch (code) {
         case E_NOENT: kprintf("The system cannot find the file specified: %s\n", what); break;
         case E_NOTDIR: kprintf("The directory name is invalid: %s\n", what); break;
@@ -427,7 +427,7 @@ void shell_print_error(int code, const char *what) {
 
 bool shell_confirm(const char *q) {
     if (adv_mode || !cfg.confirm) return true;
-    kprintf("%s %s ", q, cur_os == OS_WINDOWS ? "(Y/N)?" : "[y/N]");
+    kprintf("%s %s ", q, os_win_style() ? "(Y/N)?" : "[y/N]");
     int k = kbd_getkey();
     bool yes = (k == 'y' || k == 'Y');
     kprintf("%c\n", (k >= 32 && k < 127) ? k : ' ');
@@ -501,6 +501,8 @@ static void not_found(const char *name) {
     uint8_t save = con_get_attr();
     con_set_attr(theme.error);
     if (adv_mode) kprintf("?\n");
+    else if (cur_os == OS_DOS)
+        kprintf("Bad command or file name\n");
     else if (cur_os == OS_WINDOWS)
         kprintf("'%s' is not recognized as an internal or external command,\noperable program or batch file.\n", name);
     else if (cur_os == OS_FREEBSD) kprintf("%s: Command not found.\n", name);
@@ -835,6 +837,7 @@ int shell_exec_line(const char *line) {
             }
             if (*p == ';') nop = 0;
             else if (*p == '&' && p[1] == '&') nop = 1;
+            else if (*p == '&') nop = 0; /* single & : DOS/cmd sequential separator */
             else if (*p == '|' && p[1] == '|') nop = 2;
             else continue;
         }

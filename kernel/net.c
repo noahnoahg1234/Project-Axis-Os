@@ -17,8 +17,12 @@ static inline uint32_t htonl(uint32_t v) {
 
 uint8_t net_mac[6];
 uint32_t net_ip, net_mask, net_gw, net_dns; /* host byte order */
+enum nic_kind { NIC_NONE, NIC_E1000, NIC_RTL8139 };
+static int nic_kind;
 static bool nic_ok, configured;
 static bool use_dhcp = true;
+static void handle_frame(uint8_t *f, uint32_t len);
+static void nic_send(const void *frame, uint32_t len);
 static char nic_name[32];
 static uint32_t rx_packets, tx_packets;
 
@@ -99,7 +103,7 @@ static bool e1000_probe(void) {
                 mmio = (volatile uint8_t *)(bar0 & 0xFFFFFFF0);
                 uint32_t cmd = pci_read(bus, dev, 0, 0x04);
                 pci_write(bus, dev, 0, 0x04, cmd | 0x6); /* memory space + bus master */
-                snprintf(nic_name, sizeof nic_name, "e1000 (8086:%04x)", did);
+                snprintf(nic_name, sizeof nic_name, "Intel e1000 (8086:%04x)", did);
                 return true;
             }
         }
@@ -162,11 +166,11 @@ static bool e1000_init(void) {
     tx_cur = 0;
     ew(E_TCTL, (1 << 1) | (1 << 3) | (0x10 << 4) | (0x40 << 12));
     ew(E_TIPG, 0x0060200A);
+    nic_kind = NIC_E1000;
     return true;
 }
 
-static void nic_send(const void *frame, uint32_t len) {
-    if (!nic_ok) return;
+static void e1000_tx(const void *frame, uint32_t len) {
     tx_desc_t *d = &txd[tx_cur];
     for (int i = 0; i < 1000000 && !(d->status & 1); i++) {}
     if (len < 60) {
@@ -179,6 +183,97 @@ static void nic_send(const void *frame, uint32_t len) {
     tx_cur = (tx_cur + 1) % NTX;
     ew(E_TDT, tx_cur);
     tx_packets++;
+}
+
+
+/* ===================================================== RTL8139 driver === */
+#define RTL_RXBUF (8192 + 16 + 1536)
+static uint16_t rtl_io;
+static uint8_t *rtl_rx;
+static uint8_t *rtl_txb[4];
+static int rtl_txcur;
+static uint16_t rtl_capr;
+
+static bool rtl8139_probe(void) {
+    for (int bus = 0; bus < 8; bus++)
+        for (int dev = 0; dev < 32; dev++) {
+            uint32_t id = pci_read(bus, dev, 0, 0);
+            if ((id & 0xFFFF) != 0x10EC) continue;
+            if ((id >> 16) != 0x8139) continue;
+            uint32_t bar0 = pci_read(bus, dev, 0, 0x10);
+            if (!(bar0 & 1)) continue; /* need I/O BAR */
+            rtl_io = (uint16_t)(bar0 & 0xFFFC);
+            uint32_t cmd = pci_read(bus, dev, 0, 0x04);
+            pci_write(bus, dev, 0, 0x04, cmd | 0x5); /* I/O space + bus master */
+            snprintf(nic_name, sizeof nic_name, "Realtek RTL8139 (10ec:8139)");
+            return true;
+        }
+    return false;
+}
+
+static bool rtl8139_init(void) {
+    if (!rtl8139_probe()) return false;
+    outb(rtl_io + 0x52, 0x00);        /* power on */
+    outb(rtl_io + 0x37, 0x10);        /* software reset */
+    for (int i = 0; i < 1000000 && (inb(rtl_io + 0x37) & 0x10); i++) {}
+    rtl_rx = aligned_alloc16(RTL_RXBUF, 16);
+    for (int i = 0; i < 4; i++) rtl_txb[i] = aligned_alloc16(BUFSZ, 16);
+    if (!rtl_rx || !rtl_txb[3]) return false;
+    memset(rtl_rx, 0, RTL_RXBUF);
+    for (int i = 0; i < 6; i++) net_mac[i] = inb(rtl_io + i);
+    outl(rtl_io + 0x30, (uint32_t)rtl_rx);           /* RBSTART */
+    outl(rtl_io + 0x3C, 0);                          /* IMR = 0 (we poll) */
+    /* RCR: accept broadcast+multicast+physical match+all, WRAP, max DMA */
+    outl(rtl_io + 0x44, 0x0F | (1 << 7) | (7 << 8) | (7 << 13));
+    outb(rtl_io + 0x37, 0x0C);                       /* TE | RE */
+    rtl_capr = 0;
+    rtl_txcur = 0;
+    nic_kind = NIC_RTL8139;
+    return true;
+}
+
+static void rtl_tx(const void *frame, uint32_t len) {
+    if (len > BUFSZ) return;
+    uint8_t *b = rtl_txb[rtl_txcur];
+    if (len < 60) {
+        memset(b, 0, 60);
+        len = 60;
+    }
+    memcpy(b, frame, len);
+    outl(rtl_io + 0x20 + rtl_txcur * 4, (uint32_t)b);     /* TSAD */
+    outl(rtl_io + 0x10 + rtl_txcur * 4, len & 0x1FFF);    /* TSD: start, len */
+    /* wait for TOK (bit15) */
+    for (int i = 0; i < 1000000; i++)
+        if (inl(rtl_io + 0x10 + rtl_txcur * 4) & (1 << 15)) break;
+    rtl_txcur = (rtl_txcur + 1) & 3;
+    tx_packets++;
+}
+
+static void rtl_poll(void) {
+    int guard = 0;
+    while (!(inb(rtl_io + 0x37) & 1) && guard++ < 64) { /* while RX not empty */
+        uint8_t *p = rtl_rx + rtl_capr;
+        uint16_t status = p[0] | (p[1] << 8);
+        uint16_t len = p[2] | (p[3] << 8);
+        if (!(status & 1) || len < 14 || len > 1600) {
+            rtl_capr = 0;
+            outw(rtl_io + 0x38, rtl_capr - 16);
+            break;
+        }
+        handle_frame(p + 4, (uint32_t)len - 4); /* strip 4-byte CRC */
+        rtl_capr = (uint16_t)((rtl_capr + len + 4 + 3) & ~3);
+        if (rtl_capr >= 8192) rtl_capr %= 8192;
+        outw(rtl_io + 0x38, rtl_capr - 16);     /* CAPR */
+        /* clear ROK in ISR */
+        outw(rtl_io + 0x3E, 0x05);
+    }
+}
+
+/* ===================================================== link / check ===== */
+static bool nic_link_up(void) {
+    if (nic_kind == NIC_E1000) return (er(E_STATUS) & 2) != 0;
+    if (nic_kind == NIC_RTL8139) return !(inb(rtl_io + 0x58) & 0x04); /* MSR LinkB: 0 = up */
+    return false;
 }
 
 /* ===================================================== protocol layer === */
@@ -432,31 +527,43 @@ static void ip_input(const uint8_t *p, uint32_t len) {
     }
 }
 
-void net_poll(void) {
-    if (!nic_ok) return;
+static void handle_frame(uint8_t *f, uint32_t len) {
+    rx_packets++;
+    if (len < sizeof(eth_t)) return;
+    eth_t *e = (eth_t *)f;
+    uint16_t type = ntohs(e->type);
+    uint8_t *pl = f + sizeof(eth_t);
+    uint32_t plen = len - sizeof(eth_t);
+    if (type == 0x0806 && plen >= sizeof(arp_t)) {
+        arp_t *a = (arp_t *)pl;
+        arp_store(ntohl(a->spa), a->sha);
+        if (ntohs(a->op) == 1 && configured && ntohl(a->tpa) == net_ip) arp_send(2, a->sha, ntohl(a->spa));
+    } else if (type == 0x0800) {
+        ip_input(pl, plen);
+    }
+}
+
+static void e1000_poll(void) {
     for (int n = 0; n < NRX; n++) {
         rx_desc_t *d = &rxd[rx_cur];
         if (!(d->status & 1)) break;
-        uint8_t *f = rxbuf + rx_cur * BUFSZ;
-        uint32_t len = d->len;
-        rx_packets++;
-        if (len >= sizeof(eth_t)) {
-            eth_t *e = (eth_t *)f;
-            uint16_t type = ntohs(e->type);
-            uint8_t *pl = f + sizeof(eth_t);
-            uint32_t plen = len - sizeof(eth_t);
-            if (type == 0x0806 && plen >= sizeof(arp_t)) {
-                arp_t *a = (arp_t *)pl;
-                arp_store(ntohl(a->spa), a->sha);
-                if (ntohs(a->op) == 1 && configured && ntohl(a->tpa) == net_ip) arp_send(2, a->sha, ntohl(a->spa));
-            } else if (type == 0x0800) {
-                ip_input(pl, plen);
-            }
-        }
+        handle_frame(rxbuf + rx_cur * BUFSZ, d->len);
         d->status = 0;
         ew(E_RDT, rx_cur);
         rx_cur = (rx_cur + 1) % NRX;
     }
+}
+
+/* dispatchers (defined after the rtl8139 driver below) */
+static void rtl_tx(const void *frame, uint32_t len);
+static void rtl_poll(void);
+static void nic_send(const void *frame, uint32_t len) {
+    if (nic_kind == NIC_E1000) e1000_tx(frame, len);
+    else if (nic_kind == NIC_RTL8139) rtl_tx(frame, len);
+}
+void net_poll(void) {
+    if (nic_kind == NIC_E1000) e1000_poll();
+    else if (nic_kind == NIC_RTL8139) rtl_poll();
 }
 
 static bool resolve_mac(uint32_t ip, uint8_t *mac) {
@@ -644,37 +751,63 @@ void net_stats(uint32_t *rx, uint32_t *tx) {
     *tx = tx_packets;
 }
 
+/* confirm we can actually reach the network: ARP the gateway (fast,
+   works even when ICMP is filtered) and fall back to resolving a name */
+static bool connectivity_ok(void) {
+    if (!configured) return false;
+    uint8_t mac[6];
+    if (net_gw && resolve_mac(net_gw, mac)) return true;
+    uint32_t ip;
+    return net_resolve("one.one.one.one", &ip) || net_resolve("example.com", &ip);
+}
+bool net_online(void) { return nic_ok && configured && connectivity_ok(); }
+
+static void use_qemu_defaults(void) {
+    net_ip = ip4(10, 0, 2, 15);
+    net_mask = ip4(255, 255, 255, 0);
+    net_gw = ip4(10, 0, 2, 2);
+    net_dns = ip4(10, 0, 2, 3);
+    configured = true;
+}
+
 bool net_init(void) {
-    nic_ok = e1000_init();
-    if (!nic_ok) return false;
-    /* wait briefly for link */
-    for (int i = 0; i < 50 && !(er(E_STATUS) & 2); i++) sleep_ms(10);
-    if (!dhcp()) {
-        /* QEMU user-mode networking defaults */
-        net_ip = ip4(10, 0, 2, 15);
-        net_mask = ip4(255, 255, 255, 0);
-        net_gw = ip4(10, 0, 2, 2);
-        net_dns = ip4(10, 0, 2, 3);
-        configured = true;
-        klog("net: no DHCP answer, using static 10.0.2.15");
-        return true;
+    nic_ok = e1000_init() || rtl8139_init();
+    if (!nic_ok) {
+        klog("net: no supported network card found");
+        return false;
     }
+    klog("net: %s", nic_name);
+    /* wait for the link to come up (up to ~1.5s) */
+    for (int i = 0; i < 150 && !nic_link_up(); i++) sleep_ms(10);
+    if (!nic_link_up()) klog("net: link is down");
+    /* DHCP, retried a few times */
+    bool got = false;
+    for (int attempt = 0; attempt < 2 && !got; attempt++) got = dhcp();
+    if (!got) {
+        use_qemu_defaults();
+        klog("net: no DHCP answer, assuming 10.0.2.15 (QEMU user networking)");
+    } else {
+        char ips[16];
+        ip_to_str(net_ip, ips);
+        klog("net: DHCP lease %s", ips);
+    }
+    /* prime the ARP cache for the gateway so the first real request is fast */
+    uint8_t mac[6];
+    if (net_gw) resolve_mac(net_gw, mac);
     return true;
 }
 
 bool net_renew(void) {
     if (!nic_ok) return false;
+    for (int i = 0; i < 100 && !nic_link_up(); i++) sleep_ms(10);
     use_dhcp = true;
     bool ok = dhcp();
-    if (!ok) {
-        net_ip = ip4(10, 0, 2, 15);
-        net_mask = ip4(255, 255, 255, 0);
-        net_gw = ip4(10, 0, 2, 2);
-        net_dns = ip4(10, 0, 2, 3);
-        configured = true;
-    }
+    if (!ok) use_qemu_defaults();
+    uint8_t mac[6];
+    if (net_gw) resolve_mac(net_gw, mac);
     return ok;
 }
+bool net_link_up(void) { return nic_ok && nic_link_up(); }
 bool net_is_dhcp(void) { return use_dhcp; }
 void net_set_dhcp(void) { use_dhcp = true; net_renew(); }
 void net_set_static(uint32_t ip, uint32_t mask, uint32_t gw, uint32_t dns) {

@@ -36,7 +36,11 @@ static void windows_splash(void) {
 
 void shell_banner(void) {
     uint8_t s = con_get_attr();
-    if (cur_os == OS_WINDOWS) {
+    if (cur_os == OS_DOS) {
+        kprintf("AxisDOS Version %s\n", AXIS_VERSION);
+        kprintf("(C)opyright AxisOS.  Compatible with MS-DOS commands.\n\n");
+        kprintf("Try: DIR, TYPE, CD, COPY, DEL, CLS, VER, MEM, EDIT.  ls, cat and rm work too.\n\n");
+    } else if (cur_os == OS_WINDOWS) {
         kprintf("AxisOS [Version %s]  -  Windows personality\n", AXIS_VERSION);
         kprintf("Commands like dir, type, copy, del, cls work here - and so do ls, cat, rm.\n\n");
     } else if (cur_os == OS_FREEBSD) {
