@@ -177,7 +177,7 @@ const char *rtc_month_name(int m);
 #define CONFIG_LBA 17
 #define FS_LBA 2048
 #define FS_SECTORS 512
-enum { OS_LINUX = 0, OS_WINDOWS = 1, OS_FREEBSD = 2, OS_DOS = 3, OS_COUNT = 4 };
+enum { OS_LINUX = 0, OS_WINDOWS = 1, OS_FREEBSD = 2, OS_DOS = 3, OS_UNIX = 4, OS_COUNT = 5 };
 enum { AC_OFF = 0, AC_SUGGEST = 1, AC_AUTO = 2 };
 typedef struct __attribute__((packed)) {
     char magic[4];      /* "AXCF" */

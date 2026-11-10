@@ -5,12 +5,12 @@ int cur_os = OS_LINUX;
 bool adv_mode = false;
 bool compat_high_power = false;
 
-static const char *names[OS_COUNT] = {"Axis/Linux", "Axis/Windows", "Axis/FreeBSD", "Axis/DOS"};
-static const char *shorts[OS_COUNT] = {"linux", "windows", "freebsd", "dos"};
+static const char *names[OS_COUNT] = {"Axis/Linux", "Axis/Windows", "Axis/FreeBSD", "Axis/DOS", "Axis/Unix"};
+static const char *shorts[OS_COUNT] = {"linux", "windows", "freebsd", "dos", "unix"};
 const char *os_name(int os) { return names[os % OS_COUNT]; }
 bool os_win_style(void) { return cur_os == OS_WINDOWS || cur_os == OS_DOS; }
 bool os_dos(void) { return cur_os == OS_DOS; }
-bool os_unix_style(void) { return cur_os == OS_LINUX || cur_os == OS_FREEBSD; }
+bool os_unix_style(void) { return cur_os == OS_LINUX || cur_os == OS_FREEBSD || cur_os == OS_UNIX; }
 const char *os_short(int os) { return shorts[os % OS_COUNT]; }
 
 void sys_reboot(void) {

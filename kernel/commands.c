@@ -122,7 +122,7 @@ static int c_uname(int argc, char **argv) {
         return 0;
     }
     bool all = has_flag(argc, argv, 'a');
-    const char *sys = cur_os == OS_DOS ? "AxisDOS" : cur_os == OS_WINDOWS ? "AxisOS-Windows" : (cur_os == OS_FREEBSD ? "AxisOS-FreeBSD" : "AxisOS-Linux");
+    const char *sys = cur_os == OS_DOS ? "AxisDOS" : cur_os == OS_UNIX ? "AxisOS-Unix" : cur_os == OS_WINDOWS ? "AxisOS-Windows" : (cur_os == OS_FREEBSD ? "AxisOS-FreeBSD" : "AxisOS-Linux");
     if (all)
         kprintf("%s %s %s-axis #1 %s i686 %s\n", sys, cfg.hostname, AXIS_VERSION, cur_os == OS_FREEBSD ? "AXIS" : "SMP", os_name(cur_os));
     else if (has_flag(argc, argv, 'r'))
@@ -161,18 +161,19 @@ static int c_fetch(int argc, char **argv) {
         kprintf("Disk:                      %s\n", ata_present() ? ata_model() : "none (no persistence)");
         return 0;
     }
-    static const char *logo[4][7] = {
+    static const char *logo[5][7] = {
         {"     .--.     ", "    |o_o |    ", "    |:_/ |    ", "   //   \\ \\   ", "  (|     | )  ", " /'\\_   _/`\\  ", " \\___)=(___/  "},
         {" ##### ##### ", " ##### ##### ", " ##### ##### ", "             ", " ##### ##### ", " ##### ##### ", " ##### ##### "},
         {" /\\,-'''''-,/\\", " \\_)       (_/", " |           |", " |           |", "  ;         ; ", "   '-_____-'  ", "              "},
-        {" +----------+ ", " | C:\\>_    | ", " |          | ", " |  AxisDOS | ", " |          | ", " +----------+ ", "   ========   "}};
+        {" +----------+ ", " | C:\\>_    | ", " |          | ", " |  AxisDOS | ", " |          | ", " +----------+ ", "   ========   "},
+        {"   _______    ", "  /| UNIX |   ", " |_|______|   ", "   |      |   ", "   | o  o |   ", "   |______|   ", "   AT&T-ish   "}};
     uint8_t lc = cur_os == OS_WINDOWS ? theme.accent : (cur_os == OS_FREEBSD ? ATTR(C_LRED, theme.normal >> 4) : theme.accent);
     char lines[8][80];
     snprintf(lines[0], 80, "%s@%s", env_get("USER"), cfg.hostname);
     snprintf(lines[1], 80, "OS:      AxisOS %s (%s)", AXIS_VERSION, os_name(cur_os));
     snprintf(lines[2], 80, "Kernel:  axis %s i686", AXIS_VERSION);
     snprintf(lines[3], 80, "Uptime:  %u min %u s", up / 60, up % 60);
-    snprintf(lines[4], 80, "Shell:   axsh (%s)", cur_os == OS_DOS ? "command.com" : cur_os == OS_WINDOWS ? "cmd" : (cur_os == OS_FREEBSD ? "csh" : "bash"));
+    snprintf(lines[4], 80, "Shell:   axsh (%s)", cur_os == OS_DOS ? "command.com" : cur_os == OS_WINDOWS ? "cmd" : (cur_os == OS_FREEBSD ? "csh" : cur_os == OS_UNIX ? "sh" : "bash"));
     snprintf(lines[5], 80, "CPU:     %.40s", brand);
     snprintf(lines[6], 80, "Memory:  %u MB, files: %d (%u bytes)", mem_total_kb() / 1024, nodes, bytes);
     for (int i = 0; i < 7; i++) {
@@ -1212,17 +1213,19 @@ static int c_os(int argc, char **argv) {
     else if (!strcasecmp(n, "cmd") || !strcasecmp(n, "powershell")) target = OS_WINDOWS;
     else if (!strcasecmp(n, "bsd") || !strcasecmp(n, "csh") || !strcasecmp(n, "tcsh")) target = OS_FREEBSD;
     else if (!strcasecmp(n, "command") || !strcasecmp(n, "command.com") || !strcasecmp(n, "msdos")) target = OS_DOS;
+    else if (!strcasecmp(n, "unix") || !strcasecmp(n, "sh") || !strcasecmp(n, "sysv")) target = OS_UNIX;
     else if (argc > 1) {
         const char *a = argv[1];
         if (!strncasecmp(a, "lin", 3) || !strcasecmp(a, "l") || !strcasecmp(a, "1")) target = OS_LINUX;
         else if (!strncasecmp(a, "win", 3) || !strcasecmp(a, "w") || !strcasecmp(a, "2")) target = OS_WINDOWS;
         else if (strcasestr(a, "bsd") || !strncasecmp(a, "free", 4) || !strcasecmp(a, "f") || !strcasecmp(a, "3")) target = OS_FREEBSD;
         else if (!strncasecmp(a, "dos", 3) || strcasestr(a, "msdos") || !strcasecmp(a, "d") || !strcasecmp(a, "4")) target = OS_DOS;
+        else if (!strncasecmp(a, "uni", 3) || !strcasecmp(a, "u") || !strcasecmp(a, "5")) target = OS_UNIX;
         else {
             /* autocorrect the system name too */
-            const char *names[] = {"linux", "windows", "freebsd", "dos"};
+            const char *names[] = {"linux", "windows", "freebsd", "dos", "unix"};
             int best = -1, bd = 100;
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 5; i++) {
                 int d = edit_distance(a, names[i]);
                 if (d < bd) bd = d, best = i;
             }
@@ -1231,7 +1234,7 @@ static int c_os(int argc, char **argv) {
     }
     if (target < 0) {
         kprintf("Current system: %s%s\n", os_name(cur_os), adv_mode ? " (advanced mode)" : "");
-        kprintf("usage: os linux | windows | freebsd | dos   (shortcuts: wsl, cmd, bsd, command)\n");
+        kprintf("usage: os linux | windows | freebsd | dos | unix   (shortcuts: wsl, cmd, bsd, command, sh)\n");
         return argc > 1;
     }
     cur_os = target;
@@ -1900,6 +1903,47 @@ static int c_runprog(int argc, char **argv) {
     return compat_run(argv[1], argc - 1, argv + 1);
 }
 
+
+static int c_net(int argc, char **argv) {
+    const char *sub = argc > 1 ? argv[1] : "status";
+    if (!net_present()) {
+        kprintf("No network card detected. Supported: Intel e1000 and Realtek RTL8139.\n");
+        kprintf("In QEMU add:  -nic user,model=e1000   (or model=rtl8139)\n");
+        return 1;
+    }
+    if (!strcasecmp(sub, "reconnect") || !strcasecmp(sub, "renew") || !strcasecmp(sub, "up")) {
+        kprintf("Reconnecting... ");
+        bool ok = net_renew();
+        char ip[16]; ip_to_str(net_ip, ip);
+        kprintf(ok ? "connected (DHCP), IP %s\n" : "no DHCP answer, using %s\n", ip);
+        return ok ? 0 : 1;
+    }
+    if (!strcasecmp(sub, "test")) {
+        kprintf("Card:     %s\n", net_nic_name());
+        kprintf("Link:     %s\n", net_link_up() ? "up" : "DOWN");
+        char g[16]; ip_to_str(net_gw, g);
+        uint32_t mac6[1];(void)mac6;
+        kprintf("Gateway:  %s - ", g);
+        int rtt = net_ping(net_gw, 1, 1500);
+        kprintf(rtt >= 0 ? "reachable (%d ms)\n" : "no reply\n", rtt >= 0 ? rtt : 0);
+        kprintf("DNS:      resolving one.one.one.one ... ");
+        uint32_t ip;
+        if (net_resolve("one.one.one.one", &ip)) { char s[16]; ip_to_str(ip, s); kprintf("%s\n", s); }
+        else kprintf("failed\n");
+        kprintf("Internet: %s\n", net_online() ? "reachable" : "NOT reachable");
+        return 0;
+    }
+    /* status */
+    char ip[16], gw[16], dns[16];
+    ip_to_str(net_ip, ip); ip_to_str(net_gw, gw); ip_to_str(net_dns, dns);
+    kprintf("Card:     %s\n", net_nic_name());
+    kprintf("Mode:     %s\n", net_is_dhcp() ? "automatic (DHCP)" : "manual (static)");
+    kprintf("IP:       %s   gateway %s   dns %s\n", ip, gw, dns);
+    kprintf("Link:     %s      Internet: %s\n", net_link_up() ? "up" : "down", net_online() ? "reachable" : "not reachable");
+    kprintf("Commands: net test | net reconnect | netconf (settings)\n");
+    return 0;
+}
+
 /* ======================================================= table ========== */
 const command_t commands[] = {
     /* linux      windows      freebsd      aliases                       fn            usage                          description */
@@ -1929,9 +1973,10 @@ const command_t commands[] = {
     {"nano",      "edit",      "ee",        "vi|vim|notepad|pico|editor", c_edit,       "nano [file]",                 "Full-screen text editor", 0},
     {"files",     "explorer",  "files",     "fm|mc|nautilus|filemanager", c_explorer,   "explorer [path]",             "AxisOS file explorer", 0},
     {"settings",  "control",   "bsdconfig", "config|setup|preferences",   c_settings,   "settings",                    "Open the settings app", 0},
-    {"os",        "os",        "os",        "switch|wsl|cmd|bsd|bash|powershell|csh|tcsh|command|command.com|msdos", c_os, "os linux|windows|freebsd|dos", "Switch the system personality", 0},
+    {"os",        "os",        "os",        "switch|wsl|cmd|bsd|bash|powershell|csh|tcsh|command|command.com|msdos|unix|sh|sysv", c_os, "os linux|windows|freebsd|dos|unix", "Switch the system personality", 0},
     {"advanced",  "advanced",  "advanced",  "adv|su|sudo|expert",         c_advanced,   "advanced [on|off] | sudo cmd", "Toggle Advanced mode", 0},
     {"ifconfig",  "ipconfig",  "ifconfig",  "ip|netstat",                 c_ifconfig,   "ifconfig | ipconfig [/renew]", "Show network settings", 0},
+    {"net",       "net",       "net",       "connection|online",          c_net,        "net [status|test|reconnect]", "Network status and reconnect", 0},
     {"ping",      "ping",      "ping",      "",                           c_ping,       "ping [-c N] host",            "Check that a host answers", 0},
     {"nslookup",  "nslookup",  "host",      "dig|resolve",                c_nslookup,   "nslookup host [server]",      "Look up a host name (DNS)", 0},
     {"wget",      "curl",      "fetch",     "download|curl",              c_wget,       "wget http://url [-o file]",   "Download a file from the web", 0},

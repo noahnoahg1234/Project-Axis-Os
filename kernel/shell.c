@@ -40,7 +40,7 @@ const char *env_get(const char *name) {
         return adv_mode ? (os_win_style() ? "Administrator" : "root") : cfg.username;
     if (!strcasecmp(name, "HOSTNAME") || !strcasecmp(name, "COMPUTERNAME")) return cfg.hostname;
     if (!strcasecmp(name, "SHELL") || !strcasecmp(name, "COMSPEC"))
-        return cur_os == OS_DOS ? "C:\\COMMAND.COM" : cur_os == OS_WINDOWS ? "C:\\Windows\\System32\\cmd.exe" : (cur_os == OS_FREEBSD ? "/bin/csh" : "/bin/bash");
+        return cur_os == OS_DOS ? "C:\\COMMAND.COM" : cur_os == OS_WINDOWS ? "C:\\Windows\\System32\\cmd.exe" : (cur_os == OS_FREEBSD ? "/bin/csh" : cur_os == OS_UNIX ? "/bin/sh" : "/bin/bash");
     if (!strcasecmp(name, "OS") || !strcasecmp(name, "OSTYPE")) return os_name(cur_os);
     if (!strcasecmp(name, "PATH"))
         return cur_os == OS_DOS ? "C:\\DOS;C:\\" : cur_os == OS_WINDOWS ? "C:\\Windows\\System32;C:\\Windows;C:\\Program Files" : "/bin:/usr/bin:/usr/local/bin";

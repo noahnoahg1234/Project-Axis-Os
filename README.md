@@ -1,7 +1,7 @@
 # AxisOS
 
 A small 32-bit x86 operating system written from scratch, with its own
-bootloader, that combines **Linux**, **Windows**, **FreeBSD** and **MS-DOS** command lines
+bootloader, that combines **Linux**, **Windows**, **FreeBSD**, **MS-DOS** and **Unix** command lines
 in one system.
 
 AxisOS is its own kernel. It does not run real Linux, Windows or FreeBSD
@@ -22,8 +22,8 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 
 | Feature | Details |
 |---|---|
-| **AxisBoot bootloader** | Custom two-stage BIOS bootloader with a menu for Axis/Linux, Axis/Windows, Axis/FreeBSD and Axis/DOS, an Advanced-mode toggle, quick-boot keys (1-3) and a countdown. It reads its default system and timeout from the AxisOS settings. |
-| **Four systems** | Each one has its own prompt (`user@axis:~$`, `C:\Users\user>`, `user@axis:~ %`), colours, path style, error messages, boot screen and crash screen. Switch at any time with `os linux` / `os windows` / `os freebsd` / `os dos` (or `wsl`, `cmd`, `bsd`, `command`). The MS-DOS personality has a `C:\>` prompt, `DIR`/`TYPE`/`COPY`/`DEL`, `VER`, `MEM`, and the classic `Bad command or file name` message. |
+| **AxisBoot bootloader** | Custom two-stage BIOS bootloader with a menu for Axis/Linux, Axis/Windows, Axis/FreeBSD, Axis/DOS and Axis/Unix, an Advanced-mode toggle, quick-boot keys (1-3) and a countdown. It reads its default system and timeout from the AxisOS settings. |
+| **Five systems** | Each one has its own prompt (`user@axis:~$`, `C:\Users\user>`, `user@axis:~ %`), colours, path style, error messages, boot screen and crash screen. Switch at any time with `os linux` / `os windows` / `os freebsd` / `os dos` / `os unix` (or `wsl`, `cmd`, `bsd`, `command`, `sh`). The MS-DOS personality has a `C:\>` prompt, `DIR`/`TYPE`/`COPY`/`DEL`, `VER`, `MEM`, and the classic `Bad command or file name` message. |
 | **All commands everywhere** | `ls` and `dir`, `cat` and `type`, `rm` and `del`, `cp` and `copy`, `clear` and `cls`, `sysctl`, `chflags`, `pciconf`, `ee`, `tasklist`, `systeminfo` and more all work in every system. Run `help` to see the table. |
 | **Not case-sensitive** | `LS`, `Dir`, `CAT ~/WELCOME.TXT` all work. File names keep their case but are matched without it. |
 | **Autocorrect** | Mistyped commands and paths are fixed (`sl` becomes `ls`, `cd documnets` becomes `cd Documents`). You can set it to Automatic, Suggest-only or Off. |
@@ -33,8 +33,8 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **Settings app** | `settings` / `control` / `bsdconfig`: default system, boot timeout, colour theme (6), autocorrect, advanced-at-boot, delete confirmations, auto-save, hidden files, 12/24-hour clock, time zone, computer name, user name, switch system now, reset files. |
 | **Advanced mode** | Harder to use, more powerful: no autocorrect, no confirmations, terse `?` errors, a root prompt (`#`), a hex view in the explorer, and expert commands (`peek`, `poke`, `inb`, `outb`, `sector`, `cpuid`, `heap`, `dmesg`, `hexdump`, `format`, `panic`). Turn it on with `advanced on`, `su`, `sudo <cmd>`, or the A key in the boot menu. |
 | **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks and saving pages. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
-| **Networking** | Two network-card drivers (Intel **e1000** and Realtek **RTL8139**), auto-detected, with DHCP, DNS, TCP and HTTP, link detection and a reachability check (`ifconfig` shows `link` and `internet` status). Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
-| **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), Guess the Number, Todo List, Unit Converter. Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
+| **Networking** | Two network-card drivers (Intel **e1000** and Realtek **RTL8139**), auto-detected, with DHCP, DNS, TCP and HTTP, link detection, DNS caching with fallback to public resolvers (1.1.1.1 / 8.8.8.8), and a reachability check. `net` shows status, `net test` diagnoses the connection, `net reconnect` re-runs DHCP; `ifconfig` shows `link` and `internet` status. Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
+| **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), Tetris, 2048, Tic-Tac-Toe, Pong, Hangman, Guess the Number (Games), Todo List, Unit Converter (Tools). Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
 | **Compatibility layer** | Runs small 32-bit **Linux and FreeBSD** command-line programs (ELF, built with `gcc -pie`). Download one and run it by name, e.g. `wget http://.../hello` then `./hello`. See `programs/`. Windows `.exe` is not supported. |
 | **High Power mode** | `highpower on` gives a running program a much larger memory arena so heavier programs fit. It raises the memory limit only - it cannot make the CPU itself faster. |

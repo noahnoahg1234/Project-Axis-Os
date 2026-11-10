@@ -133,6 +133,15 @@ out = vm.run("echo hi > d.txt & type d.txt", ">")
 check("DOS redirection and type", "hi" in out, out)
 vm.close()
 
+# -------------------------------------------------------------- Unix -------
+vm, ok = boot("5", "$")
+check("boots into Axis/Unix from the boot menu", ok)
+out = vm.run("uname -a", "$")
+check("Unix uname reports Unix", "Unix" in out, out)
+out = vm.run("echo $SHELL", "$")
+check("Unix shell is /bin/sh", "/bin/sh" in out, out)
+vm.close()
+
 # ------------------------------------- network, browser, store, shello ----
 # serve the sample app repository (store/) on the host; QEMU's user network
 # reaches the host as 10.0.2.2
@@ -152,6 +161,8 @@ out = vm.run("ifconfig", "$")
 check("network card configured by DHCP", "10.0.2.15" in out, out)
 out = vm.run("ping -c 1 10.0.2.2", "$")
 check("ping", "1 received" in out, out)
+out = vm.run("net", "$", 15)
+check("net status command", "Link:" in out and "Internet:" in out, out)
 out = vm.run("curl http://10.0.2.2:%d/index.txt | grep dice" % port, "$", 20)
 check("HTTP download (curl)", "Dice Roller" in out, out)
 out = vm.run("wget http://10.0.2.2:%d/quiz.sh && grep SCORE quiz.sh | head -n 1" % port, "$", 20)
@@ -166,13 +177,16 @@ check("browser opens and closes", "after browser" in out, out)
 vm.type("store\r")
 time.sleep(1.0)
 shot(vm, "store")
-vm.key("down", "down", "down", "down", "down", "down", "down", "ret")   # Guess the Number
+vm.key("right", "right")        # All -> Programs -> Games category
+time.sleep(0.3)
+# Games list: tetris, 2048, tictactoe, pong, hangman, guess
+vm.key("down", "down", "down", "down", "down", "ret")   # install Guess the Number
 time.sleep(0.6)
-vm.key("a")
+vm.key("a")                     # add an online repository
 time.sleep(0.3)
 vm.type("10.0.2.2:%d/index.txt\r" % port)
 time.sleep(3)
-vm.key("ret")                                                          # install Dice Roller
+vm.key("ret")                   # install the first online app (Dice Roller)
 time.sleep(2)
 vm.key("q")
 time.sleep(0.4)

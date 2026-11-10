@@ -269,6 +269,7 @@ static void rtl_poll(void) {
     }
 }
 
+
 /* ===================================================== link / check ===== */
 static bool nic_link_up(void) {
     if (nic_kind == NIC_E1000) return (er(E_STATUS) & 2) != 0;
@@ -845,66 +846,79 @@ bool net_resolve(const char *host, uint32_t *ip) {
         return true;
     }
     if (!net_up()) return false;
+    /* small DNS cache so repeat lookups are instant */
+    static struct { char host[64]; uint32_t ip; } dns_cache[12];
+    static int dns_next;
+    for (int i = 0; i < 12; i++)
+        if (dns_cache[i].ip && !strcasecmp(dns_cache[i].host, host)) {
+            *ip = dns_cache[i].ip;
+            return true;
+        }
     uint8_t *b = kmalloc(1600);
     if (!b) return false;
+    /* try the configured DNS, then the gateway, then public resolvers */
+    uint32_t servers[4] = {net_dns, net_gw, ip4(1, 1, 1, 1), ip4(8, 8, 8, 8)};
     bool ok = false;
-    for (int attempt = 0; attempt < 3 && !ok; attempt++) {
-        uint16_t id = (uint16_t)(ticks * 7919 + attempt);
-        int o = 0;
-        b[o++] = id >> 8, b[o++] = id & 0xFF;
-        b[o++] = 0x01, b[o++] = 0x00; /* recursion desired */
-        b[o++] = 0, b[o++] = 1, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0;
-        const char *p = host;
-        while (*p && o < 250) {
-            const char *dot = strchr(p, '.');
-            int l = dot ? (int)(dot - p) : (int)strlen(p);
-            if (l == 0 || l > 63) break;
-            b[o++] = (uint8_t)l;
-            memcpy(b + o, p, l);
-            o += l;
-            p += l;
-            if (*p == '.') p++;
-        }
-        b[o++] = 0;
-        b[o++] = 0, b[o++] = 1, b[o++] = 0, b[o++] = 1; /* A, IN */
-        uint16_t sport = (uint16_t)(40000 + (ticks % 20000));
-        udp_send(net_dns, sport, 53, b, o);
-        int r = udp_wait(sport, b, 2000);
-        if (r < 12 || ((b[0] << 8) | b[1]) != id) continue;
-        int qd = (b[4] << 8) | b[5], an = (b[6] << 8) | b[7];
-        int q = 12;
-        for (int i = 0; i < qd && q < r; i++) {
-            while (q < r && b[q]) {
-                if ((b[q] & 0xC0) == 0xC0) {
-                    q++;
+    for (int si = 0; si < 4 && !ok; si++) {
+        uint32_t server = servers[si];
+        if (!server) continue;
+        if (si && server == servers[0]) continue; /* skip duplicates */
+        for (int attempt = 0; attempt < 2 && !ok; attempt++) {
+            uint16_t id = (uint16_t)(ticks * 7919 + attempt + si * 131);
+            int o = 0;
+            b[o++] = id >> 8, b[o++] = id & 0xFF;
+            b[o++] = 0x01, b[o++] = 0x00; /* recursion desired */
+            b[o++] = 0, b[o++] = 1, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0, b[o++] = 0;
+            const char *p = host;
+            while (*p && o < 250) {
+                const char *dot = strchr(p, '.');
+                int l = dot ? (int)(dot - p) : (int)strlen(p);
+                if (l == 0 || l > 63) break;
+                b[o++] = (uint8_t)l;
+                memcpy(b + o, p, l);
+                o += l;
+                p += l;
+                if (*p == '.') p++;
+            }
+            b[o++] = 0;
+            b[o++] = 0, b[o++] = 1, b[o++] = 0, b[o++] = 1; /* A, IN */
+            uint16_t sport = (uint16_t)(40000 + (ticks % 20000));
+            udp_send(server, sport, 53, b, o);
+            int r = udp_wait(sport, b, 1500);
+            if (r < 12 || ((b[0] << 8) | b[1]) != id) continue;
+            int qd = (b[4] << 8) | b[5], an = (b[6] << 8) | b[7];
+            int q = 12;
+            for (int i = 0; i < qd && q < r; i++) {
+                while (q < r && b[q]) {
+                    if ((b[q] & 0xC0) == 0xC0) { q++; break; }
+                    q += b[q] + 1;
+                }
+                q += 5;
+            }
+            for (int i = 0; i < an && q + 10 < r; i++) {
+                while (q < r && b[q]) {
+                    if ((b[q] & 0xC0) == 0xC0) { q++; break; }
+                    q += b[q] + 1;
+                }
+                q++;
+                uint16_t type = (b[q] << 8) | b[q + 1];
+                uint16_t rdl = (b[q + 8] << 8) | b[q + 9];
+                q += 10;
+                if (type == 1 && rdl == 4 && q + 4 <= r) {
+                    *ip = (uint32_t)b[q] << 24 | b[q + 1] << 16 | b[q + 2] << 8 | b[q + 3];
+                    ok = true;
                     break;
                 }
-                q += b[q] + 1;
+                q += rdl;
             }
-            q += 5;
         }
-        for (int i = 0; i < an && q + 10 < r; i++) {
-            while (q < r && b[q]) {
-                if ((b[q] & 0xC0) == 0xC0) {
-                    q++;
-                    break;
-                }
-                q += b[q] + 1;
-            }
-            q++;
-            uint16_t type = (b[q] << 8) | b[q + 1];
-            uint16_t rdl = (b[q + 8] << 8) | b[q + 9];
-            q += 10;
-            if (type == 1 && rdl == 4 && q + 4 <= r) {
-                *ip = (uint32_t)b[q] << 24 | b[q + 1] << 16 | b[q + 2] << 8 | b[q + 3];
-                ok = true;
-                break;
-            }
-            q += rdl;
-        }
-        if (!ok) break; /* got an answer without A record */
     }
     kfree(b);
+    if (ok) {
+        strlcpy(dns_cache[dns_next].host, host, 64);
+        dns_cache[dns_next].ip = *ip;
+        dns_next = (dns_next + 1) % 12;
+    }
     return ok;
 }
 

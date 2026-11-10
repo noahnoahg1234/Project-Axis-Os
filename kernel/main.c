@@ -49,6 +49,12 @@ void shell_banner(void) {
         con_set_attr(s);
         kprintf("Welcome to Axis/FreeBSD! sysctl, ee, chflags, pciconf and every Linux and\n");
         kprintf("Windows command are available too.\n\n");
+    } else if (cur_os == OS_UNIX) {
+        con_set_attr(theme.accent);
+        kprintf("AxisOS %s (Axis/Unix)\n", AXIS_VERSION);
+        con_set_attr(s);
+        kprintf("Welcome to Axis/Unix - a classic Unix personality. The shell is sh; the\n");
+        kprintf("usual Unix commands (ls, cat, grep, man, ps, who) all work.\n\n");
     } else {
         con_set_attr(theme.accent);
         kprintf("AxisOS %s (Axis/Linux) tty0\n", AXIS_VERSION);
