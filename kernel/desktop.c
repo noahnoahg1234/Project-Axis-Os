@@ -21,6 +21,7 @@ int app_paint(void);
 int app_snake(void);
 int app_clock(void);
 int app_monitor(void);
+int blockworld_run(void);
 static int act_terminal(void) { return -999; } /* sentinel: leave to shell */
 static int act_netconf(void);
 
@@ -46,6 +47,7 @@ static const icon_t icons[] = {
     {"Paint", "<#>", app_paint, C_LRED},
     {"Minesweeper", "[*]", app_minesweeper, C_LRED},
     {"Snake", "~@~", app_snake, C_LGREEN},
+    {"BlockWorld", "[#]", blockworld_run, C_LGREEN},
     {"Clock", "(:)", app_clock, C_LCYAN},
     {"Monitor", "[#]", app_monitor, C_LGREEN},
     {"Network", "<~>", act_netconf, C_LBLUE},
@@ -128,7 +130,7 @@ static void launch(int i, bool *leave) {
 }
 
 static void about(void) {
-    tui_message("About AxisOS", "AxisOS " AXIS_VERSION " - one system, four personalities. Desktop, browser, App Store and more.");
+    tui_message("About AxisOS", "AxisOS " AXIS_VERSION " - one system, five personalities. Desktop, browser, App Store and more.");
 }
 
 int desktop_run(void) {

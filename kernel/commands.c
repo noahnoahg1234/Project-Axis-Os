@@ -1875,6 +1875,7 @@ static int c_ai(int argc, char **argv) {
     return ai_run();
 }
 static int c_axar(int argc, char **argv) { return axar_cmd(argc, argv); }
+static int c_blockworld(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return blockworld_run(); }
 static int c_highpower(int argc, char **argv) {
     if (argc > 1) compat_high_power = !strcasecmp(argv[1], "on") || !strcasecmp(argv[1], "1") || !strcasecmp(argv[1], "enable");
     else compat_high_power = !compat_high_power;
@@ -1987,6 +1988,7 @@ const command_t commands[] = {
     {"assistant", "assistant", "assistant", "ai|helper|help-me|clippy|cortana", c_ai,    "assistant",                   "Axis Assistant (offline helper)", 0},
     {"netconf",   "netsh",     "netconf",   "network-setup|wifi|netsetup", c_netconf,    "netconf",                     "Network settings (IP, DHCP)", 0},
     {"axar",      "winrar",    "axar",      "rar|archive|tar|zip|unzip|7z", c_axar,      "axar a|x|l archive files...", "AxisRAR archiver (pack/extract)", 0},
+    {"blockworld","blockworld","blockworld","mine|craft|sandbox|minecraft", c_blockworld, "blockworld",                 "BlockWorld sandbox game", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
     {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},
     {"runprog",   "runprog",   "runprog",   "linux|wine|exec|launch",     c_runprog,    "runprog ./program [args]",    "Run a Linux/FreeBSD program", 0},

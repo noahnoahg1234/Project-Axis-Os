@@ -22,6 +22,7 @@ int app_2048(void);
 int app_tetris(void);
 int app_pong(void);
 int app_hangman(void);
+int blockworld_run(void);
 
 /* ----------------------------------------------------- bundled scripts -- */
 static const char *script_guess =
@@ -108,6 +109,7 @@ static const app_t builtin[] = {
     {"paint", "Paint", "Windows-style", "Draw coloured pictures with blocks and save them as .pnt files.", app_paint, NULL, "", "AxisOS repository"},
     {"taskmgr", "Task Monitor", "Windows-style", "Live CPU, memory, disk and network use (like Task Manager / top).", app_monitor, NULL, "", "AxisOS repository"},
     {"snake", "Snake", "Linux-style", "The classic terminal snake game. Eat, grow, don't crash.", app_snake, NULL, "", "AxisOS repository"},
+    {"blockworld", "BlockWorld", "Games", "Minecraft-style block sandbox: mine, build, craft, fight mobs. Creative, cheats, saved worlds.", blockworld_run, NULL, "", "AxisOS repository"},
     {"tetris", "Tetris", "Games", "Stack the falling blocks and clear full lines.", app_tetris, NULL, "", "AxisOS repository"},
     {"2048", "2048", "Games", "Slide and join numbered tiles to reach 2048.", app_2048, NULL, "", "AxisOS repository"},
     {"tictactoe", "Tic-Tac-Toe", "Games", "Noughts and crosses against the computer.", app_tictactoe, NULL, "", "AxisOS repository"},

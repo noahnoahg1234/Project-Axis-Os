@@ -459,7 +459,7 @@ void fs_format(void) {
     snprintf(b, sizeof b, "%s/Downloads", home);
     mkdirp(b);
 
-    mkf("/etc", "motd", "Welcome to AxisOS - one system, four personalities.\n", 0);
+    mkf("/etc", "motd", "Welcome to AxisOS - one system, five personalities.\n", 0);
     mkf("/etc", "os-release",
         "NAME=\"AxisOS\"\nVERSION=\"" AXIS_VERSION "\"\nID=axis\nPRETTY_NAME=\"AxisOS " AXIS_VERSION "\"\n"
         "PERSONALITIES=\"linux windows freebsd\"\n", 0);

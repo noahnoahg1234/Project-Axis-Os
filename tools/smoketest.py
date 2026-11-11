@@ -142,6 +142,36 @@ out = vm.run("echo $SHELL", "$")
 check("Unix shell is /bin/sh", "/bin/sh" in out, out)
 vm.close()
 
+# ---------------------------------------------------------- BlockWorld -----
+vm, ok = boot("1", "$")
+vm.type("blockworld\r")
+time.sleep(1.5)                  # game draws to VGA, not serial
+shot(vm, "blockworld")
+vm.key("ret")                    # create a new world
+time.sleep(0.5)
+vm.type("SmokeWorld\r")          # name
+time.sleep(0.3)
+vm.type("1\r")                   # seed
+time.sleep(0.3)
+vm.key("y")                      # creative
+time.sleep(1.0)
+shot(vm, "blockworld_play")
+vm.key("t")                      # cheat console
+time.sleep(0.3)
+vm.type("give diamond 5\r")
+time.sleep(0.4)
+vm.key("q")                      # leave
+time.sleep(0.3)
+vm.key("y")                      # save
+time.sleep(0.8)
+vm.key("q")                      # quit menu to shell
+time.sleep(0.5)
+vm.type("\r")                    # flush any stray key into an empty prompt
+time.sleep(0.3)
+out = vm.run("ls /Worlds", "$")
+check("BlockWorld saves worlds to disk", "SmokeWorld" in out, out)
+vm.close()
+
 # ------------------------------------- network, browser, store, shello ----
 # serve the sample app repository (store/) on the host; QEMU's user network
 # reaches the host as 10.0.2.2
@@ -180,7 +210,7 @@ shot(vm, "store")
 vm.key("right", "right")        # All -> Programs -> Games category
 time.sleep(0.3)
 # Games list: tetris, 2048, tictactoe, pong, hangman, guess
-vm.key("down", "down", "down", "down", "down", "ret")   # install Guess the Number
+vm.key("down", "down", "down", "down", "down", "down", "ret")   # install Guess the Number (Games: blockworld,tetris,2048,tictactoe,pong,hangman,guess)
 time.sleep(0.6)
 vm.key("a")                     # add an online repository
 time.sleep(0.3)
