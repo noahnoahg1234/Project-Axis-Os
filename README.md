@@ -18,6 +18,8 @@ qemu-system-i386 -drive file=axisos.img,format=raw -nic user,model=e1000
 
 Install QEMU first from https://www.qemu.org/download/. On Windows, use the full path to `qemu-system-i386.exe`. Or build it yourself with `make` (see below).
 
+**Using PowerISO (or similar tools):** `axisos.img` is a raw hard-disk image. PowerISO can open it directly (**File -> Open**), **mount** it, **convert** it to `.iso`, or **burn / write it to a USB stick** to boot a real PC. In a virtual machine (VirtualBox / VMware / QEMU) attach `axisos.img` as the **hard disk** and boot from it.
+
 ## Features
 
 | Feature | Details |
@@ -32,11 +34,13 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **Text editor** | `nano` / `edit` / `ee`: full-screen editor with save, find, cut/paste line and go-to-line. |
 | **Settings app** | `settings` / `control` / `bsdconfig`: default system, boot timeout, colour theme (6), autocorrect, advanced-at-boot, delete confirmations, auto-save, hidden files, 12/24-hour clock, time zone, computer name, user name, switch system now, reset files. |
 | **Advanced mode** | Harder to use, more powerful: no autocorrect, no confirmations, terse `?` errors, a root prompt (`#`), a hex view in the explorer, and expert commands (`peek`, `poke`, `inb`, `outb`, `sector`, `cpuid`, `heap`, `dmesg`, `hexdump`, `format`, `panic`). Turn it on with `advanced on`, `su`, `sudo <cmd>`, or the A key in the boot menu. |
-| **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks and saving pages. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
+| **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks, downloading files (press W), and saving pages. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
 | **Networking** | Two network-card drivers (Intel **e1000** and Realtek **RTL8139**), auto-detected, with DHCP, DNS, TCP and HTTP, link detection, DNS caching with fallback to public resolvers (1.1.1.1 / 8.8.8.8), and a reachability check. `net` shows status, `net test` diagnoses the connection, `net reconnect` re-runs DHCP; `ifconfig` shows `link` and `internet` status. Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
 | **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), BlockWorld, Tetris, 2048, Tic-Tac-Toe, Pong, Hangman, Guess the Number (Games), Todo List, Unit Converter (Tools). Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
-| **BlockWorld** | A built-in Minecraft-style block sandbox (`blockworld`, also `mine` / `craft`, or install it from the App Store). Mine and place blocks, an inventory and hotbar GUI, crafting, mobs (pigs, cows, sheep, zombies, skeletons, spiders, creepers), health, day/night, **Survival and Creative** modes, a **cheat console** (`/creative`, `/give`, `/tp`, `/time`, `/spawn`, `/fly`, ...), and **saved worlds** in `/Worlds`. Keyboard or mouse. |
+| **BlockWorld** | A built-in Minecraft-style block sandbox (`blockworld`, also `mine` / `craft`, or install it from the App Store). Explore biomes (plains, forest, desert, snow, jungle, mountains, oceans), swim in flowing water, mine and place blocks, an inventory and hotbar GUI, crafting, mobs (pigs, cows, sheep, zombies, skeletons, spiders, creepers), health, day/night, **Survival and Creative** modes, a **cheat console** (`/creative`, `/give`, `/tp`, `/time`, `/spawn`, `/fly`, ...), and **saved worlds** in `/Worlds`. Keyboard or mouse. |
+| **7-Zip (AxisZip)** | `7z` / `zip` / `unzip`: create and open real `.zip` files, with a built-in DEFLATE decoder so it extracts compressed zips (not just stored ones). `7z a out.zip files`, `7z x file.zip`, `7z l file.zip`. |
+| **Media Player** | `player` (also `media` / `music`): plays music through the **PC speaker** - built-in public-domain tunes plus your own `.sng` files in `/Music` - with a playlist and an animated bar visualizer. |
 | **Compatibility layer** | Runs small 32-bit **Linux and FreeBSD** command-line programs (ELF, built with `gcc -pie`). Download one and run it by name, e.g. `wget http://.../hello` then `./hello`. See `programs/`. Windows `.exe` is not supported. |
 | **High Power mode** | `highpower on` gives a running program a much larger memory arena so heavier programs fit. It raises the memory limit only - it cannot make the CPU itself faster. |
 | **Name converter** | Each program is told which system it is on: a Linux program sees "Linux", a FreeBSD program sees "FreeBSD" (via `uname` / `sysctl`). `osname auto\|linux\|windows\|freebsd` overrides what every program is told. |
@@ -136,7 +140,9 @@ kernel/net.c        e1000 driver, ARP/IP/ICMP/UDP/DHCP/DNS/TCP, HTTP client
 kernel/browser.c    text web browser
 kernel/store.c      App Store, installed apps, script interpreter
 kernel/games.c      Calculator, Minesweeper, Paint, Snake, Clock, Task Monitor
-kernel/blockworld.c BlockWorld sandbox game
+kernel/blockworld.c BlockWorld sandbox game (biomes, water, mobs)
+kernel/zip.c        AxisZip (7-Zip-style) with a DEFLATE decoder
+kernel/mediaplayer.c PC-speaker music player
 kernel/shello.c     Shello retro shell
 kernel/desktop.c    retro text-mode mouse desktop
 kernel/compat.c     Linux/FreeBSD ELF loader + system-call layer

@@ -484,7 +484,7 @@ static const char *home_html =
     "</ul><h2>Keys</h2><ul>"
     "<li><b>Up/Down PgUp/PgDn</b> scroll, <b>Tab</b> or <b>Right</b> next link, <b>`</b> previous link, <b>Enter</b> open link</li>"
     "<li><b>Backspace</b> or <b>Left</b> back, <b>F</b> forward, <b>R</b> reload, <b>H</b> home</li>"
-    "<li><b>G</b> go to address, <b>S</b> search, <b>B</b> bookmark page, <b>D</b> save page to a file, <b>L</b> pick link by number, <b>Q</b> quit</li>"
+    "<li><b>G</b> go to address, <b>S</b> search, <b>B</b> bookmark page, <b>D</b> save page text, <b>W</b> download a link to a file, <b>L</b> pick link by number, <b>Q</b> quit</li>"
     "</ul><h2>Notes</h2>"
     "<p>AxisOS speaks plain http://. Secure https:// pages are opened through FrogFind automatically, which "
     "shows a simplified, readable version. Local files work too: try <a href=\"file:/usr/share/doc/axis-guide.txt\">the AxisOS guide</a>.</p>";
@@ -682,7 +682,7 @@ static void draw(void) {
         scr_printf(1, 23, A_DIM, "%.70s", cur_url);
     scr_fill(0, 24, SCREEN_W, 1, ' ', theme.bar);
     if (adv_mode) scr_printf(1, 24, theme.bar, "%d lines %d links  G S Tab Enter Bksp F R H B D Q", nlines, nlinks);
-    else scr_puts(1, 24, "Tab Link  Enter Open  Bksp Back  G Go to  S Search  B Bookmark  H Home  Q Quit", theme.bar);
+    else scr_puts(1, 24, "Tab Link  Enter Open  Bksp Back  G Go  S Search  W Download  B Bookmark  Q Quit", theme.bar);
 }
 
 static void ensure_visible(int link) {
@@ -710,6 +710,36 @@ static void save_page(void) {
     int r = id < 0 ? id : fs_write(id, t, (uint32_t)o);
     kfree(t);
     snprintf(status, sizeof status, r < 0 ? "Could not save: %s" : "Saved to %s", r < 0 ? fs_strerror(r) : name);
+}
+
+/* download the current page, or the selected link's target, as a raw file */
+static void download(void) {
+    char url[512];
+    if (sel >= 0 && sel < nlinks) resolve_url(cur_url, links[sel], url, sizeof url);
+    else strlcpy(url, cur_url, sizeof url);
+    if (strncasecmp(url, "http://", 7) && strncasecmp(url, "https://", 8)) { snprintf(status, sizeof status, "Can only download http(s) links."); return; }
+    /* default filename from the URL */
+    char name[FS_NAME_MAX];
+    const char *slash = strrchr(url + 7, '/');
+    strlcpy(name, slash && slash[1] ? slash + 1 : "download.bin", sizeof name);
+    char *q = strchr(name, '?'); if (q) *q = 0;
+    if (!name[0] || !fs_valid_name(name)) strcpy(name, "download.bin");
+    if (!tui_prompt("Download", "Save the linked file as:", name, sizeof name) || !name[0]) return;
+    char full[520];
+    if (!strncasecmp(url, "https://", 8)) via_frogfind(url, full, sizeof full);
+    else strlcpy(full, url, sizeof full);
+    scr_fill(0, 23, SCREEN_W, 1, ' ', theme.normal);
+    scr_printf(1, 23, theme.accent, "Downloading %.60s ...", full);
+    http_resp_t r;
+    loading_url = full;
+    int st = http_get(full, &r, progress_cb);
+    if (st < 0) { snprintf(status, sizeof status, "Download failed: %s", http_strerror(st)); return; }
+    int id = fs_mkfile(name, fs_cwd);
+    int w = id < 0 ? id : fs_write(id, r.body, r.len);
+    uint32_t n = r.len;
+    kfree(r.body);
+    if (w < 0) snprintf(status, sizeof status, "Could not save: %s", fs_strerror(w));
+    else { snprintf(status, sizeof status, "Downloaded %u bytes to %s (HTTP %d)", n, name, st); if (cfg.autosave) fs_save(); }
 }
 
 static void add_bookmark(void) {
@@ -793,6 +823,7 @@ int browser_run(const char *start) {
             }
         } else if (k == 'b' || k == 'B') add_bookmark();
         else if (k == 'd' || k == 'D') save_page();
+        else if (k == 'w' || k == 'W') download();
         else if (k == 'l' || k == 'L') {
             char n[8] = "";
             if (tui_prompt("Link", "Link number (1 = first link on the page):", n, sizeof n) && atoi(n) > 0 && atoi(n) <= nlinks) {

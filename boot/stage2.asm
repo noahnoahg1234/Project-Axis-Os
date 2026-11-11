@@ -32,11 +32,42 @@ stage2:
     mov [drive], dl
     cld
 
-    ; ---------------------------------------------------------- settings ---
-    mov si, dap_cfg
-    mov ah, 0x42
+    ; ---- detect INT13h LBA extensions + CHS geometry (for CD / old BIOS) --
+    mov ah, 0x41
+    mov bx, 0x55AA
     mov dl, [drive]
     int 0x13
+    jc .nolba
+    cmp bx, 0xAA55
+    jne .nolba
+    mov byte [use_lba], 1
+.nolba:
+    mov ah, 0x08
+    mov dl, [drive]
+    push es
+    int 0x13
+    pop es
+    jc .geodef
+    mov al, cl
+    and al, 0x3F
+    cmp al, 0
+    je .geodef
+    mov [spt], al
+    mov al, dh
+    inc al
+    mov [heads], al
+    jmp .geodone
+.geodef:
+    mov byte [spt], 18
+    mov byte [heads], 2
+.geodone:
+
+    ; ---------------------------------------------------------- settings ---
+    xor ax, ax
+    mov es, ax
+    mov eax, CONFIG_LBA
+    mov bx, CONFIG_BUF
+    call read_one
     jc .cfg_default
     cmp dword [CONFIG_BUF], 'AXCF'
     jne .cfg_default
@@ -394,45 +425,35 @@ boot_selected:
     mov [mem_kb], eax
 .mem_done:
 
-    ; load kernel in chunks of 32 sectors (16 KiB, never crosses 64K)
+    ; load the kernel one sector at a time (LBA or CHS)
     mov word [k_seg], KERNEL_SEG
     mov dword [k_lba], KERNEL_LBA
     mov word [k_left], KERNEL_SECTORS
 .load:
-    mov ax, [k_left]
-    test ax, ax
-    jz .loaded
-    cmp ax, 32
-    jbe .chunk
-    mov ax, 32
-.chunk:
-    mov [k_chunk], ax
-    mov [dap_k + 2], ax
-    mov word [dap_k + 4], 0
-    mov bx, [k_seg]
-    mov [dap_k + 6], bx
+    cmp word [k_left], 0
+    je .loaded
+    mov es, [k_seg]
+    xor bx, bx
     mov eax, [k_lba]
-    mov [dap_k + 8], eax
-    mov dword [dap_k + 12], 0
-    xor ax, ax
-    mov ds, ax
-    mov si, dap_k
-    mov ah, 0x42
-    mov dl, [drive]
-    int 0x13
+    call read_one
     jc disk_error
-    movzx eax, word [k_chunk]
-    add [k_lba], eax
-    sub [k_left], ax
-    shl ax, 5                          ; sectors * 512 / 16
-    add [k_seg], ax
-    mov ax, 0xB800                     ; progress dot
+    add dword [k_lba], 1
+    sub word [k_left], 1
+    add word [k_seg], 32               ; advance 512 bytes
+    mov ax, [k_left]
+    test al, 0x0F                       ; progress dot every 16 sectors
+    jnz .load
+    push es
+    mov ax, 0xB800
     mov es, ax
     mov di, [dot_pos]
     mov word [es:di], 0x0AFE
     add word [dot_pos], 2
+    pop es
     jmp .load
 .loaded:
+    xor ax, ax
+    mov es, ax
 
     ; boot info for the kernel
     mov dword [BOOTINFO], 'AXBI'
@@ -467,6 +488,50 @@ boot_selected:
     or eax, 1
     mov cr0, eax
     jmp 0x08:pm_entry
+
+; read one sector: EAX = LBA, ES:BX = destination. CF set on error.
+read_one:
+    cmp byte [use_lba], 1
+    jne .chs
+    mov [dap_lba], eax
+    mov [dap_off], bx
+    mov [dap_seg], es
+    mov si, dap_rd
+    mov ah, 0x42
+    mov dl, [drive]
+    int 0x13
+    ret
+.chs:
+    push bx
+    movzx ebx, byte [spt]
+    xor edx, edx
+    mov ecx, eax
+    mov eax, ecx
+    div ebx                ; eax=LBA/spt edx=LBA%spt
+    mov cl, dl
+    inc cl                 ; sector
+    movzx ebx, byte [heads]
+    xor edx, edx
+    div ebx                ; eax=cyl edx=head
+    mov ch, al
+    mov dh, dl
+    pop bx
+    mov dl, [drive]
+    mov ax, 0x0201
+    int 0x13
+    ret
+
+align 4
+dap_rd:
+    db 0x10, 0
+    dw 1
+dap_off: dw 0
+dap_seg: dw 0
+dap_lba: dd 0
+         dd 0
+use_lba: db 0
+spt:     db 18
+heads:   db 2
 
 disk_error:
     mov ax, 0xB800
@@ -503,14 +568,6 @@ gdt_desc:
     dd gdt
 
 align 4
-dap_cfg:
-    db 0x10, 0
-    dw 1
-    dw CONFIG_BUF, 0
-    dq CONFIG_LBA
-dap_k:
-    db 0x10, 0
-    times 14 db 0
 
 
 drive:     db 0

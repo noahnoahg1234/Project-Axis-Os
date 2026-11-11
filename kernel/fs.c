@@ -518,6 +518,8 @@ void fs_format(void) {
     mkf(home, ".profile", "# login shell profile\nexport EDITOR=nano\n", 0);
     snprintf(b, sizeof b, "%s/Documents", users);
     mkf(b, "notes.txt", "My notes\n--------\n", 0);
+    mkf("/Music", "twinkle.sng", ";Twinkle (yours)\nC4 C4 G4 G4 A4 A4 G4:4 F4 F4 E4 E4 D4 D4 C4:4\n", 0);
+    mkdirp("/Documents");
     mkf("/var/log", "messages", "", 0);
     fs_dirty = true;
 }

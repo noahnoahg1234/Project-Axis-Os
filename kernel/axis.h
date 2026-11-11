@@ -153,6 +153,9 @@ bool mouse_poll_moved(void);
 void mouse_set(int x, int y);
 int desktop_run(void);
 int blockworld_run(void);
+int zip_cmd(int argc, char **argv);
+int sevenzip_run(void);
+int mediaplayer_run(void);
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
 bool kbd_ctrl_c_pending(void);

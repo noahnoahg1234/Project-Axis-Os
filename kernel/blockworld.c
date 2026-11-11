@@ -148,28 +148,42 @@ static void gen_tree(int x, int top) {
 static void worldgen(uint32_t sd) {
     rng = sd ? sd : 1;
     memset(world, AIR, sizeof world);
-    int base = WH * 55 / 100;
+    /* ---- biomes: assign a biome to each column in random bands --------- */
+    enum { BIO_PLAINS, BIO_FOREST, BIO_DESERT, BIO_SNOW, BIO_JUNGLE, BIO_MOUNTAIN, BIO_OCEAN, BIO_N };
+    static uint8_t biome[WW];
+    int sea = WH * 55 / 100;   /* sea level */
+    for (int x = 0; x < WW;) {
+        int b = irnd(BIO_N);
+        int w = 18 + irnd(26);
+        for (int i = 0; i < w && x < WW; i++, x++) biome[x] = (uint8_t)b;
+    }
+    int base = sea;
     int h = base;
     for (int x = 0; x < WW; x++) {
-        /* wandering heightmap */
-        h += irnd(3) - 1;
-        if (h < 8) h = 8;
+        int amp = biome[x] == BIO_MOUNTAIN ? 3 : biome[x] == BIO_OCEAN ? 1 : 1;
+        int target = base;
+        if (biome[x] == BIO_MOUNTAIN) target = sea - 10;
+        else if (biome[x] == BIO_OCEAN) target = sea + 5;
+        h += irnd(2 * amp + 1) - amp;
+        h += (target - h) / 12;           /* drift toward the biome's typical height */
+        if (h < 6) h = 6;
         if (h > WH - 6) h = WH - 6;
-        /* smooth-ish */
         ground[x] = h;
     }
-    for (int x = 2; x < WW - 2; x++) ground[x] = (ground[x-1]+ground[x]+ground[x+1])/3;
-    bool desert = irnd(2);
+    for (int x = 2; x < WW - 2; x++) ground[x] = (ground[x-1] + ground[x]*2 + ground[x+1]) / 4;
     for (int x = 0; x < WW; x++) {
-        int g = ground[x];
-        bool sandy = ((x / 24) % 3 == 0);
+        int g = ground[x], b = biome[x];
+        bool sandy = (b == BIO_DESERT) || (b == BIO_OCEAN);
+        bool snowy = (b == BIO_SNOW || b == BIO_MOUNTAIN);
         for (int y = g; y < WH; y++) {
             if (y == WH - 1) world[y][x] = BEDROCK;
-            else if (y == g) world[y][x] = sandy ? SAND : GRASS;
+            else if (y == g) world[y][x] = snowy ? SNOW : sandy ? SAND : GRASS;
             else if (y < g + 4) world[y][x] = sandy ? SAND : DIRT;
             else world[y][x] = STONE;
         }
-        (void)desert;
+        /* fill oceans/low ground with water up to sea level */
+        if (b == BIO_OCEAN || g > sea)
+            for (int y = sea; y < g; y++) if (world[y][x] == AIR) world[y][x] = snowy ? ICE : WATER;
     }
     /* ores in stone */
     for (int i = 0; i < WW * 4; i++) {
@@ -198,12 +212,18 @@ static void worldgen(uint32_t sd) {
             for (int y = g; y < g + 2 && y < WH; y++) if (world[y][x]==AIR||world[y][x]==GRASS) world[y][x]=WATER;
         }
     }
-    /* trees & flowers on grass */
+    /* trees, cactus and flowers by biome */
     for (int x = 3; x < WW - 3; x += 1) {
-        int g = ground[x];
+        int g = ground[x], b = biome[x];
         if (world[g][x] == GRASS) {
-            if (irnd(10) == 0) gen_tree(x, g - 1);
-            else if (irnd(8) == 0 && g-1>=0) world[g-1][x] = irnd(2) ? FLOWER : SAPLING;
+            int chance = b == BIO_FOREST ? 3 : b == BIO_JUNGLE ? 2 : b == BIO_PLAINS ? 12 : 9;
+            if (irnd(chance) == 0) gen_tree(x, g - 1);
+            else if (irnd(7) == 0 && g - 1 >= 0) world[g - 1][x] = irnd(2) ? FLOWER : SAPLING;
+        } else if (world[g][x] == SAND && b == BIO_DESERT && irnd(14) == 0) {
+            int ch = 1 + irnd(3);
+            for (int i = 0; i < ch && g - 1 - i >= 0; i++) world[g - 1 - i][x] = CACTUS;
+        } else if (world[g][x] == SNOW && irnd(16) == 0) {
+            gen_tree(x, g - 1);
         }
     }
 }
@@ -264,14 +284,47 @@ static void try_move(int dx) {
     if (!solid_at(nx, py)) { px = nx; facing = dx > 0 ? 1 : -1; }
     else if (!solid_at(nx, py - 1) && !solid_at(px, py - 1)) { px = nx; py--; facing = dx > 0 ? 1 : -1; } /* step up */
 }
+static int camtop;
 static void physics(void) {
     bool onground = solid_at(px, py + 1);
     bool onladder = world[py][px] == LADDER;
+    bool inwater = world[py][px] == WATER;
     if (flying) { pvy = 0; return; }
     if (onladder) { pvy = 0; return; }
+    if (inwater) {
+        /* buoyancy: sink slowly */
+        static int sink;
+        pvy = 0;
+        if (!onground && ++sink >= 2) { sink = 0; if (py + 1 < WH) py++; }
+        return;
+    }
     if (pvy > 0) { if (!solid_at(px, py - 1)) { py--; pvy--; } else pvy = 0; }
     else if (!onground) { if (py + 1 < WH) py++; }
     if (py >= WH - 1) { py = WH - 2; }
+}
+
+/* conserve-moving water flow over the visible region (can't flood the world) */
+static void water_flow(void) {
+    int left = cam, right = cam + VIEW_W, top = camtop, bot = camtop + VIEW_H;
+    if (left < 1) left = 1;
+    if (right > WW - 1) right = WW - 1;
+    if (top < 0) top = 0;
+    if (bot > WH - 1) bot = WH - 1;
+    for (int y = top; y < bot; y++)
+        for (int x = left; x < right; x++) {
+            if (world[y][x] != WATER) continue;
+            if (world[y + 1][x] == AIR) { world[y + 1][x] = WATER; world[y][x] = AIR; continue; }
+            if (B[world[y + 1][x]].solid || world[y + 1][x] == WATER) {
+                int dir = (rnd() & 1) ? 1 : -1;
+                for (int t = 0; t < 2; t++, dir = -dir) {
+                    int nx = x + dir;
+                    if (nx < 1 || nx >= WW - 1) continue;
+                    if (world[y][nx] == AIR && (world[y + 1][nx] == AIR || B[world[y + 1][nx]].solid || world[y + 1][nx] == WATER)) {
+                        world[y][nx] = WATER; world[y][x] = AIR; break;
+                    }
+                }
+            }
+        }
 }
 
 static void damage_player(int d) {
@@ -357,6 +410,9 @@ static void do_place(void) {
     if (cx == px && cy == py && B[id].solid) return;
     world[cy][cx] = (uint8_t)id;
     consume_held();
+    if (id == WATER) {
+        /* a bounded splash: let the flow sim spread it naturally next ticks */
+    }
     if (id == TNT) {
         /* fun: tnt blows a crater */
         for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++) {
@@ -398,6 +454,7 @@ static void render(void) {
     int top = py - VIEW_H / 2;
     if (top < 0) top = 0;
     if (top > WH - VIEW_H) top = WH - VIEW_H;
+    camtop = top;
     /* world */
     for (int sy = 0; sy < VIEW_H; sy++)
         for (int sx = 0; sx < VIEW_W; sx++)
@@ -719,7 +776,7 @@ int blockworld_run(void) {
     con_show_cursor(false);
     if (!world_menu()) { scr_restore(saved); con_show_cursor(true); return 0; }
     cx = px + facing; cy = py;
-    uint32_t last_phys = 0, last_mob = 0, last_spawn = 0, last_save = ticks;
+    uint32_t last_phys = 0, last_mob = 0, last_spawn = 0, last_flow = 0, last_save = ticks;
     bool running = true;
     while (running) {
         render();
@@ -732,7 +789,7 @@ int blockworld_run(void) {
             }
             else if (k == 'a' || k == 'A') { try_move(-1); if (cx > px + 6) cx = px; }
             else if (k == 'd' || k == 'D') { try_move(1); if (cx < px - 6) cx = px; }
-            else if (k == 'w' || k == 'W' || k == ' ') { if (flying) { if (!solid_at(px, py-1)) py--; } else if (solid_at(px, py+1) || world[py][px]==LADDER) pvy = 3; }
+            else if (k == 'w' || k == 'W' || k == ' ') { if (flying) { if (!solid_at(px, py-1)) py--; } else if (world[py][px]==WATER) { if (!solid_at(px, py-1)) py--; } else if (solid_at(px, py+1) || world[py][px]==LADDER) pvy = 3; }
             else if (k == 's' || k == 'S') { if (flying && !solid_at(px, py+1)) py++; else if (world[py][px]==LADDER && !solid_at(px,py+1)) py++; }
             else if (k == KEY_UP) { if (cy > 0) cy--; }
             else if (k == KEY_DOWN) { if (cy < WH - 1) cy++; }
@@ -765,6 +822,7 @@ int blockworld_run(void) {
             /* keep cursor near player by default when idle */
         }
         if (ticks - last_mob >= 8) { last_mob = ticks; mob_tick(); }
+        if (ticks - last_flow >= 10) { last_flow = ticks; water_flow(); }
         if (ticks - last_spawn >= 40) { last_spawn = ticks; try_spawn(); }
         /* time + hunger + regen */
         wtime += 2; if (wtime >= 24000) wtime = 0;
