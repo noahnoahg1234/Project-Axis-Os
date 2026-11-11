@@ -156,6 +156,13 @@ int blockworld_run(void);
 int zip_cmd(int argc, char **argv);
 int sevenzip_run(void);
 int mediaplayer_run(void);
+/* minijs.c - tiny JavaScript engine for the browser */
+void js_begin(void);
+void js_run(const char *src, int len);
+const char *js_output(void);
+uint32_t js_output_len(void);
+bool js_get_alert(char *out, size_t n);
+void js_free(void);
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
 bool kbd_ctrl_c_pending(void);

@@ -1,0 +1,16 @@
+<html><head><title>JS Test</title></head><body>
+<h1>JavaScript on AxisOS</h1>
+<p>Before script.</p>
+<script>
+document.write("<h2>Hello from JavaScript!</h2>");
+var total = 0;
+for (var i = 1; i <= 5; i++) { total = total + i; document.write("<li>i = " + i + "</li>"); }
+document.write("<p>Sum 1..5 = " + total + "</p>");
+function greet(name) { return "Hi, " + name + "!"; }
+document.write("<p>" + greet("AxisOS") + "</p>");
+if (total > 10) { document.write("<p>total is big</p>"); } else { document.write("<p>small</p>"); }
+document.write("<p>Math.max(3,9,2) = " + Math.max(3,9,2) + "</p>");
+alert("Script finished! Sum = " + total);
+</script>
+<p>After script.</p>
+</body></html>

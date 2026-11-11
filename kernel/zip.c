@@ -114,19 +114,16 @@ static uint8_t *inflate(const uint8_t *in, uint32_t inlen, uint32_t expected, ui
             uint32_t len = s.in[s.inpos] | (s.in[s.inpos + 1] << 8);
             s.inpos += 4;
             for (uint32_t i = 0; i < len; i++) { if (s.inpos >= s.inlen) { s.error = true; break; } inf_out(&s, s.in[s.inpos++]); }
-        } else if (type == 1) { /* fixed Huffman */
-            static huff_t fl, fd; static bool init;
-            if (!init) {
-                uint8_t l[288];
-                for (int i = 0; i < 144; i++) l[i] = 8;
-                for (int i = 144; i < 256; i++) l[i] = 9;
-                for (int i = 256; i < 280; i++) l[i] = 7;
-                for (int i = 280; i < 288; i++) l[i] = 8;
-                huff_build(&fl, l, 288);
-                uint8_t d[30]; for (int i = 0; i < 30; i++) d[i] = 5;
-                huff_build(&fd, d, 30);
-                init = true;
-            }
+        } else if (type == 1) { /* fixed Huffman (built fresh each block) */
+            huff_t fl, fd;
+            uint8_t l[288];
+            for (int i = 0; i < 144; i++) l[i] = 8;
+            for (int i = 144; i < 256; i++) l[i] = 9;
+            for (int i = 256; i < 280; i++) l[i] = 7;
+            for (int i = 280; i < 288; i++) l[i] = 8;
+            huff_build(&fl, l, 288);
+            uint8_t d[30]; for (int i = 0; i < 30; i++) d[i] = 5;
+            huff_build(&fd, d, 30);
             inf_block(&s, &fl, &fd);
         } else if (type == 2) { /* dynamic Huffman */
             int hlit = (int)inf_bits(&s, 5) + 257;

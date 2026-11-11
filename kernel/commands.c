@@ -1878,6 +1878,27 @@ static int c_axar(int argc, char **argv) { return axar_cmd(argc, argv); }
 static int c_blockworld(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return blockworld_run(); }
 static int c_zip(int argc, char **argv) { return zip_cmd(argc, argv); }
 static int c_media(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return mediaplayer_run(); }
+static int c_js(int argc, char **argv) {
+    if (argc < 2) { kprintf("usage: js <code>   e.g. js document.write(2+2)\n"); return 1; }
+    char code[512] = "";
+    for (int i = 1; i < argc; i++) { strlcpy(code + strlen(code), argv[i], sizeof code - strlen(code)); strlcpy(code + strlen(code), " ", sizeof code - strlen(code)); }
+    js_begin();
+    js_run(code, (int)strlen(code));
+    const char *o = js_output();
+    /* print output, turning <br> into newlines and dropping other tags */
+    bool tag = false;
+    for (const char *p = o; *p; p++) {
+        if (!strncasecmp(p, "<br>", 4)) { con_putc('\n'); p += 3; continue; }
+        if (*p == '<') { tag = true; continue; }
+        if (*p == '>') { tag = false; continue; }
+        if (!tag) con_putc(*p);
+    }
+    char al[256];
+    if (js_get_alert(al, sizeof al)) kprintf("\n[alert] %s", al);
+    kprintf("\n");
+    js_free();
+    return 0;
+}
 static int c_highpower(int argc, char **argv) {
     if (argc > 1) compat_high_power = !strcasecmp(argv[1], "on") || !strcasecmp(argv[1], "1") || !strcasecmp(argv[1], "enable");
     else compat_high_power = !compat_high_power;
@@ -1993,6 +2014,7 @@ const command_t commands[] = {
     {"blockworld","blockworld","blockworld","mine|craft|sandbox|minecraft", c_blockworld, "blockworld",                 "BlockWorld sandbox game", 0},
     {"7z",        "7z",        "7z",        "zip|unzip|sevenzip",         c_zip,        "7z a|x|l file.zip [files]",   "Create and open .zip files", 0},
     {"player",    "player",    "player",    "media|music|mplayer|vlc|wmp", c_media,     "player",                      "Media player (music & art)", 0},
+    {"js",        "js",        "js",        "javascript",            c_js,         "js <code>",                   "Run a snippet of JavaScript", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
     {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},
     {"runprog",   "runprog",   "runprog",   "linux|wine|exec|launch",     c_runprog,    "runprog ./program [args]",    "Run a Linux/FreeBSD program", 0},

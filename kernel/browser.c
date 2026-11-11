@@ -484,7 +484,7 @@ static const char *home_html =
     "</ul><h2>Keys</h2><ul>"
     "<li><b>Up/Down PgUp/PgDn</b> scroll, <b>Tab</b> or <b>Right</b> next link, <b>`</b> previous link, <b>Enter</b> open link</li>"
     "<li><b>Backspace</b> or <b>Left</b> back, <b>F</b> forward, <b>R</b> reload, <b>H</b> home</li>"
-    "<li><b>G</b> go to address, <b>S</b> search, <b>B</b> bookmark page, <b>D</b> save page text, <b>W</b> download a link to a file, <b>L</b> pick link by number, <b>Q</b> quit</li>"
+    "<li><b>G</b> go to address, <b>S</b> search, <b>B</b> bookmark page, <b>D</b> save page text, <b>W</b> download a link, <b>J</b> toggle JavaScript, <b>L</b> link by number, <b>Q</b> quit</li>"
     "</ul><h2>Notes</h2>"
     "<p>AxisOS speaks plain http://. Secure https:// pages are opened through FrogFind automatically, which "
     "shows a simplified, readable version. Local files work too: try <a href=\"file:/usr/share/doc/axis-guide.txt\">the AxisOS guide</a>.</p>";
@@ -548,6 +548,77 @@ static void error_page(const char *url, const char *msg) {
     kfree(h);
 }
 
+/* run the page's <script> blocks and splice their document.write output in */
+static bool js_enabled = true;
+static char js_alert_msg[256];
+static bool js_alert_pending;
+
+static char *preprocess_js(const char *h, uint32_t len, uint32_t *outlen) {
+    uint32_t cap = len * 2 + 256, o = 0;
+    char *out = kmalloc(cap);
+    if (!out) return NULL;
+    js_begin();
+    const char *p = h, *end = h + len;
+    while (p < end) {
+        if ((*p == '<') && (p + 7 <= end) && !strncasecmp(p, "<script", 7) &&
+            (p[7] == '>' || p[7] == ' ' || p[7] == '\t' || p[7] == '\n')) {
+            const char *gt = memchr(p, '>', (size_t)(end - p));
+            if (!gt) break;
+            /* src="..."? */
+            char srcurl[256] = "";
+            const char *a = p + 7;
+            const char *sp = strcasestr(a, "src");
+            if (sp && sp < gt) {
+                const char *q = sp + 3;
+                while (q < gt && (*q == ' ' || *q == '=' )) q++;
+                char quote = (*q == '"' || *q == '\'') ? *q : 0;
+                if (quote) q++;
+                int l = 0;
+                while (q < gt && *q != quote && *q != ' ' && *q != '>' && l < 255) srcurl[l++] = *q++;
+                srcurl[l] = 0;
+            }
+            const char *endtag = strcasestr(gt + 1, "</script");
+            const char *body = gt + 1;
+            uint32_t blen = endtag ? (uint32_t)(endtag - body) : 0;
+            uint32_t before = js_output_len();
+            if (srcurl[0]) {
+                char full[300];
+                resolve_url(cur_url, srcurl, full, sizeof full);
+                if (!strncasecmp(full, "http://", 7)) {
+                    http_resp_t r;
+                    if (http_get(full, &r, NULL) == 200) { js_run(r.body, (int)r.len); kfree(r.body); }
+                }
+            } else if (blen) {
+                js_run(body, (int)blen);
+            }
+            /* splice any document.write output here */
+            const char *w = js_output();
+            uint32_t after = js_output_len();
+            for (uint32_t i = before; i < after; i++) {
+                if (o + 1 >= cap) { cap *= 2; char *n = krealloc(out, cap); if (!n) break; out = n; }
+                out[o++] = w[i];
+            }
+            p = endtag ? (strchr(endtag, '>') ? strchr(endtag, '>') + 1 : end) : end;
+            continue;
+        }
+        if (o + 1 >= cap) { cap *= 2; char *n = krealloc(out, cap); if (!n) break; out = n; }
+        out[o++] = *p++;
+    }
+    out[o] = 0;
+    *outlen = o;
+    if (js_get_alert(js_alert_msg, sizeof js_alert_msg)) js_alert_pending = true;
+    return out;
+}
+
+/* render an HTML page, running its JavaScript first (when enabled) */
+static void render_page(const char *h, uint32_t len) {
+    if (!js_enabled || !strstr(h, "<script")) { render_html(h, len); return; }
+    uint32_t nl = 0;
+    char *expanded = preprocess_js(h, len, &nl);
+    if (expanded) { render_html(expanded, nl); kfree(expanded); }
+    else render_html(h, len);
+}
+
 static bool is_html(const char *ctype, const char *body) {
     if (ctype[0]) return strcasestr(ctype, "html") != NULL;
     return strcasestr(body, "<html") || strcasestr(body, "<body") || strcasestr(body, "<p>") || strcasestr(body, "<a ");
@@ -590,7 +661,7 @@ static void load(const char *input, bool push) {
             const char *nm = n->name;
             size_t l = strlen(nm);
             bool html = (l > 4 && !strcasecmp(nm + l - 4, ".htm")) || (l > 5 && !strcasecmp(nm + l - 5, ".html"));
-            if (html) render_html((const char *)n->data, n->size);
+            if (html) render_page((const char *)n->data, n->size);
             else render_text(n->data ? (const char *)n->data : "", n->size);
             if (!title[0]) strlcpy(title, nm, sizeof title);
         }
@@ -613,7 +684,7 @@ static void load(const char *input, bool push) {
         if (st < 0) {
             error_page(url, http_strerror(st));
         } else {
-            if (is_html(r.ctype, r.body)) render_html(r.body, r.len);
+            if (is_html(r.ctype, r.body)) render_page(r.body, r.len);
             else render_text(r.body, r.len);
             if (st >= 400 && !title[0]) snprintf(title, sizeof title, "HTTP error %d", st);
             kfree(r.body);
@@ -769,6 +840,7 @@ int browser_run(const char *start) {
     load(start && *start ? start : "about:home", true);
     for (;;) {
         con_show_cursor(false);
+        if (js_alert_pending) { js_alert_pending = false; tui_message("JavaScript alert()", js_alert_msg); }
         draw();
         int k = kbd_getkey();
         if (k == 'q' || k == 'Q' || k == KEY_ESC) break;
@@ -833,6 +905,7 @@ int browser_run(const char *start) {
         }
     }
     page_clear();
+    js_free();
     for (int i = 0; i < hist_n; i++) kfree(history[i]);
     hist_n = 0;
     scr_restore(saved);
