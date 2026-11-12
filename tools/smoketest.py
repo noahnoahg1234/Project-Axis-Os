@@ -176,6 +176,27 @@ out = vm.run("ls /Worlds", "$")
 check("BlockWorld saves worlds to disk", "SmokeWorld" in out, out)
 vm.close()
 
+# -------------------------------------------------------- ClassicTube ------
+vm, ok = boot("1", "$")
+vm.type("classictube\r")
+time.sleep(1.5)
+shot(vm, "classictube")
+vm.key("ret")          # play a video
+time.sleep(1.0)
+vm.key("q")            # back to list
+time.sleep(0.3)
+vm.key("s")            # shorts
+time.sleep(0.8)
+vm.key("q")            # back
+time.sleep(0.3)
+vm.key("q")            # quit to shell
+time.sleep(0.4)
+vm.type("\r")
+time.sleep(0.3)
+out = vm.run("echo after tube", "$")
+check("ClassicTube opens and returns to the shell", "after tube" in out, out)
+vm.close()
+
 # ------------------------------------- network, browser, store, shello ----
 # serve the sample app repository (store/) on the host; QEMU's user network
 # reaches the host as 10.0.2.2

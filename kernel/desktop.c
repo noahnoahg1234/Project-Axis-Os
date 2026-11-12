@@ -22,6 +22,7 @@ int app_snake(void);
 int app_clock(void);
 int app_monitor(void);
 int blockworld_run(void);
+int classictube_run(void);
 static int act_terminal(void) { return -999; } /* sentinel: leave to shell */
 static int act_netconf(void);
 
@@ -48,6 +49,7 @@ static const icon_t icons[] = {
     {"Minesweeper", "[*]", app_minesweeper, C_LRED},
     {"Snake", "~@~", app_snake, C_LGREEN},
     {"BlockWorld", "[#]", blockworld_run, C_LGREEN},
+    {"ClassicTube", "|>|", classictube_run, C_LRED},
     {"Clock", "(:)", app_clock, C_LCYAN},
     {"Monitor", "[#]", app_monitor, C_LGREEN},
     {"Network", "<~>", act_netconf, C_LBLUE},

@@ -163,6 +163,7 @@ const char *js_output(void);
 uint32_t js_output_len(void);
 bool js_get_alert(char *out, size_t n);
 void js_free(void);
+int classictube_run(void);
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
 bool kbd_ctrl_c_pending(void);
