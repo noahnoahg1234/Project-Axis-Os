@@ -231,32 +231,79 @@ static void fsub(bn_t*r,const bn_t*a,const bn_t*b){ bn_t t; if(bn_cmp(a,b)>=0) b
 static void fmul(bn_t*r,const bn_t*a,const bn_t*b){ bn_mulmod(r,a,b,&EP); }
 static void finv(bn_t*r,const bn_t*a){ bn_modinv_prime(r,a,&EP); }
 
-/* point double/add in affine coords (mod p) */
-static void ec_dbl(ecp_t*r,const ecp_t*p){
-    if(p->inf||bn_is_zero(&p->y)){ r->inf=1; return; }
-    bn_t three,xx,num,den,l,t,t2;
-    bn_zero(&three); three.w[0]=3;
-    fmul(&xx,&p->x,&p->x); bn_t m3; bn_mulmod(&m3,&xx,&three,&EP); /* 3x^2 */
-    bn_zero(&t); t.w[0]=3; /* a = -3 => 3x^2 + a = 3x^2 -3 ... use a=-3 */
-    bn_t aa; bn_zero(&aa); aa.w[0]=3; bn_t negA; fsub(&negA,&EP,&aa); /* p-3 */
-    fadd(&num,&m3,&negA);
-    fadd(&den,&p->y,&p->y); finv(&t2,&den); fmul(&l,&num,&t2);
-    bn_t l2; fmul(&l2,&l,&l); bn_t x2; fsub(&x2,&l2,&p->x); fsub(&x2,&x2,&p->x);
-    bn_t dx; fsub(&dx,&p->x,&x2); bn_t y2; fmul(&y2,&l,&dx); fsub(&y2,&y2,&p->y);
-    bn_copy(&r->x,&x2); bn_copy(&r->y,&y2); r->inf=0;
+/*
+ * Jacobian projective coordinates (X,Y,Z) == affine (X/Z^2, Y/Z^3), with the
+ * point at infinity as Z=0. This keeps the per-operation cost to field
+ * multiplications and does a single modular inversion per scalar multiply, in
+ * place of one inversion per point add/double - the difference between a
+ * handshake that takes minutes and one that takes under a second.
+ */
+typedef struct { bn_t X, Y, Z; } jpt_t;
+static void fmulk(bn_t *r, const bn_t *a, uint32_t k) { bn_t kk; bn_zero(&kk); kk.w[0] = k; bn_mulmod(r, a, &kk, &EP); }
+
+/* doubling, assuming curve parameter a = -3 (true for P-256): EFD dbl-2001-b */
+static void j_dbl(jpt_t *r, const jpt_t *p) {
+    if (bn_is_zero(&p->Z)) { *r = *p; return; }
+    bn_t delta, gamma, beta, alpha, t, xmd, xpd;
+    fmul(&delta, &p->Z, &p->Z);                  /* Z^2            */
+    fmul(&gamma, &p->Y, &p->Y);                  /* Y^2            */
+    fmul(&beta, &p->X, &gamma);                  /* X*gamma        */
+    fsub(&xmd, &p->X, &delta); fadd(&xpd, &p->X, &delta);
+    fmul(&t, &xmd, &xpd); fmulk(&alpha, &t, 3);  /* 3(X-Z^2)(X+Z^2)*/
+    bn_t a2, b8; fmul(&a2, &alpha, &alpha); fmulk(&b8, &beta, 8);
+    bn_t X3; fsub(&X3, &a2, &b8);                 /* X3 = a^2-8beta */
+    bn_t ypz, ypz2; fadd(&ypz, &p->Y, &p->Z); fmul(&ypz2, &ypz, &ypz);
+    fsub(&ypz2, &ypz2, &gamma); bn_t Z3; fsub(&Z3, &ypz2, &delta);
+    bn_t b4, tmp, ay, g2, g28; fmulk(&b4, &beta, 4); fsub(&tmp, &b4, &X3);
+    fmul(&ay, &alpha, &tmp); fmul(&g2, &gamma, &gamma); fmulk(&g28, &g2, 8);
+    bn_t Y3; fsub(&Y3, &ay, &g28);
+    bn_copy(&r->X, &X3); bn_copy(&r->Y, &Y3); bn_copy(&r->Z, &Z3);
 }
-static void ec_add(ecp_t*r,const ecp_t*a,const ecp_t*b){
-    if(a->inf){*r=*b;return;} if(b->inf){*r=*a;return;}
-    if(bn_cmp(&a->x,&b->x)==0){ if(bn_cmp(&a->y,&b->y)==0){ ec_dbl(r,a); return; } r->inf=1; return; }
-    bn_t num,den,l,t; fsub(&num,&b->y,&a->y); fsub(&den,&b->x,&a->x); finv(&t,&den); fmul(&l,&num,&t);
-    bn_t l2; fmul(&l2,&l,&l); bn_t x3; fsub(&x3,&l2,&a->x); fsub(&x3,&x3,&b->x);
-    bn_t dx; fsub(&dx,&a->x,&x3); bn_t y3; fmul(&y3,&l,&dx); fsub(&y3,&y3,&a->y);
-    bn_copy(&r->x,&x3); bn_copy(&r->y,&y3); r->inf=0;
+/* general addition: EFD add-2007-bl */
+static void j_add(jpt_t *r, const jpt_t *a, const jpt_t *b) {
+    if (bn_is_zero(&a->Z)) { *r = *b; return; }
+    if (bn_is_zero(&b->Z)) { *r = *a; return; }
+    bn_t Z1Z1, Z2Z2, U1, U2, S1, S2, t;
+    fmul(&Z1Z1, &a->Z, &a->Z); fmul(&Z2Z2, &b->Z, &b->Z);
+    fmul(&U1, &a->X, &Z2Z2); fmul(&U2, &b->X, &Z1Z1);
+    fmul(&t, &b->Z, &Z2Z2); fmul(&S1, &a->Y, &t);
+    fmul(&t, &a->Z, &Z1Z1); fmul(&S2, &b->Y, &t);
+    if (bn_cmp(&U1, &U2) == 0) {                  /* same x */
+        if (bn_cmp(&S1, &S2) == 0) { j_dbl(r, a); return; }
+        bn_zero(&r->X); bn_zero(&r->Y); bn_zero(&r->Z); r->X.w[0] = 1; r->Y.w[0] = 1; return; /* infinity */
+    }
+    bn_t H, I, J, rr, V;
+    fsub(&H, &U2, &U1);
+    bn_t h2; fmulk(&h2, &H, 2); fmul(&I, &h2, &h2);
+    fmul(&J, &H, &I);
+    bn_t sd; fsub(&sd, &S2, &S1); fmulk(&rr, &sd, 2);
+    fmul(&V, &U1, &I);
+    bn_t X3, t2, t3; fmul(&t2, &rr, &rr); fsub(&t2, &t2, &J); bn_t v2; fmulk(&v2, &V, 2); fsub(&X3, &t2, &v2);
+    bn_t Y3, vmx; fsub(&vmx, &V, &X3); fmul(&Y3, &rr, &vmx);
+    bn_t s1j; fmul(&s1j, &S1, &J); fmulk(&s1j, &s1j, 2); fsub(&Y3, &Y3, &s1j);
+    bn_t Z3, zpz; fadd(&zpz, &a->Z, &b->Z); fmul(&Z3, &zpz, &zpz);
+    fsub(&Z3, &Z3, &Z1Z1); fsub(&Z3, &Z3, &Z2Z2); fmul(&Z3, &Z3, &H);
+    bn_copy(&r->X, &X3); bn_copy(&r->Y, &Y3); bn_copy(&r->Z, &Z3);
+    (void)t3;
 }
-static void ec_mul(ecp_t*r,const bn_t*k,const ecp_t*p){
-    ecp_t acc; acc.inf=1; int bits=bn_bits(k);
-    for(int i=bits-1;i>=0;i--){ ecp_t d; ec_dbl(&d,&acc); if(bn_getbit(k,i)){ ecp_t s; ec_add(&s,&d,p); acc=s; } else acc=d; }
-    *r=acc;
+static void j_to_affine(ecp_t *out, const jpt_t *p) {
+    if (bn_is_zero(&p->Z)) { out->inf = 1; bn_zero(&out->x); bn_zero(&out->y); return; }
+    bn_t zi, zi2, zi3; finv(&zi, &p->Z); fmul(&zi2, &zi, &zi); fmul(&zi3, &zi2, &zi);
+    fmul(&out->x, &p->X, &zi2); fmul(&out->y, &p->Y, &zi3); out->inf = 0;
+}
+/* r = k*P (P affine), result in Jacobian */
+static void ec_mul_j(jpt_t *r, const bn_t *k, const ecp_t *p) {
+    jpt_t acc; bn_zero(&acc.X); bn_zero(&acc.Y); bn_zero(&acc.Z); acc.X.w[0] = 1; acc.Y.w[0] = 1; /* infinity */
+    jpt_t pj; bn_copy(&pj.X, &p->x); bn_copy(&pj.Y, &p->y); bn_zero(&pj.Z); pj.Z.w[0] = 1;
+    int bits = bn_bits(k);
+    for (int i = bits - 1; i >= 0; i--) {
+        jpt_t d; j_dbl(&d, &acc);
+        if (bn_getbit(k, i)) { jpt_t s; j_add(&s, &d, &pj); acc = s; } else acc = d;
+    }
+    *r = acc;
+}
+static void ec_mul(ecp_t *r, const bn_t *k, const ecp_t *p) {
+    jpt_t j; ec_mul_j(&j, k, p); j_to_affine(r, &j);
 }
 static int ecdsa_verify(const cert_t *issuer, const uint8_t *sig, uint32_t sig_len, const uint8_t hash[32]) {
     if (issuer->key_type != 2) return -1;
@@ -274,10 +321,51 @@ static int ecdsa_verify(const cert_t *issuer, const uint8_t *sig, uint32_t sig_l
     ecp_t G, Q; bn_from_be(&G.x, P256_GX, 32); bn_from_be(&G.y, P256_GY, 32); G.inf = 0;
     if (issuer->ec_pub_len != 65 || issuer->ec_pub[0] != 0x04) return -1;
     bn_from_be(&Q.x, issuer->ec_pub + 1, 32); bn_from_be(&Q.y, issuer->ec_pub + 33, 32); Q.inf = 0;
-    ecp_t A, B, R; ec_mul(&A, &u1, &G); ec_mul(&B, &u2, &Q); ec_add(&R, &A, &B);
-    if (R.inf) return -1;
-    bn_t rx; bn_mod(&rx, &R.x, &EN);
+    jpt_t A, B, R; ec_mul_j(&A, &u1, &G); ec_mul_j(&B, &u2, &Q); j_add(&R, &A, &B);
+    ecp_t Raff; j_to_affine(&Raff, &R);
+    if (Raff.inf) return -1;
+    bn_t rx; bn_mod(&rx, &Raff.x, &EN);
     return bn_cmp(&rx, &r) == 0 ? 0 : -1;
+}
+
+/* ------------------------------------------------- P-256 ECDH (for TLS) - */
+/* is (x,y) a point on y^2 = x^3 - 3x + b (mod p), with x,y < p ? */
+static int ec_on_curve(const ecp_t *p) {
+    if (bn_cmp(&p->x, &EP) >= 0 || bn_cmp(&p->y, &EP) >= 0) return -1;
+    bn_t y2, x2, x3, three, tx, b, rhs;
+    fmul(&y2, &p->y, &p->y);
+    fmul(&x2, &p->x, &p->x); fmul(&x3, &x2, &p->x);
+    bn_zero(&three); three.w[0] = 3; bn_mulmod(&tx, &p->x, &three, &EP);
+    bn_from_be(&b, P256_B, 32);
+    fsub(&rhs, &x3, &tx); fadd(&rhs, &rhs, &b);
+    return bn_cmp(&y2, &rhs) == 0 ? 0 : -1;
+}
+/* reduce a 32-byte scalar into [1, n-1] in place */
+void p256_scalar_reduce(uint8_t s[32]) {
+    ec_setup();
+    bn_t k, r; bn_from_be(&k, s, 32); bn_mod(&r, &k, &EN);
+    if (bn_is_zero(&r)) r.w[0] = 1;
+    bn_to_be(&r, s, 32);
+}
+/* public key = priv * G, as a 65-byte uncompressed point (0x04||X||Y) */
+void p256_keygen(const uint8_t priv[32], uint8_t pub[65]) {
+    ec_setup();
+    bn_t k; bn_from_be(&k, priv, 32);
+    ecp_t G, R; bn_from_be(&G.x, P256_GX, 32); bn_from_be(&G.y, P256_GY, 32); G.inf = 0;
+    ec_mul(&R, &k, &G);
+    pub[0] = 0x04; bn_to_be(&R.x, pub + 1, 32); bn_to_be(&R.y, pub + 33, 32);
+}
+/* shared secret: X coordinate of priv * peer. peer is 65-byte uncompressed. 0=ok */
+int p256_ecdh(const uint8_t priv[32], const uint8_t peer[65], uint8_t out[32]) {
+    if (peer[0] != 0x04) return -1;
+    ec_setup();
+    ecp_t P; bn_from_be(&P.x, peer + 1, 32); bn_from_be(&P.y, peer + 33, 32); P.inf = 0;
+    if (ec_on_curve(&P) != 0) return -1;         /* reject invalid-curve points */
+    bn_t k; bn_from_be(&k, priv, 32);
+    ecp_t R; ec_mul(&R, &k, &P);
+    if (R.inf) return -1;
+    bn_to_be(&R.x, out, 32);
+    return 0;
 }
 
 static int verify_sig(const cert_t *issuer, int sig_alg, const uint8_t *sig, uint32_t sig_len,

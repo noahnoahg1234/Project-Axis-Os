@@ -11,6 +11,13 @@
  */
 #include "axis.h"
 
+#ifdef TLS_TRACE
+#include <stdio.h>
+#define TR(...) fprintf(stderr, "[tls] " __VA_ARGS__)
+#else
+#define TR(...) do{}while(0)
+#endif
+
 /* from x509.c */
 int x509_verify_chain(const uint8_t *certs, uint32_t certs_len, const char *hostname,
                       const uint8_t *tbs_sig_data, uint32_t tbs_len,
@@ -191,8 +198,9 @@ static int tls_handshake(tls_t *t, const char *host, uint16_t port) {
 
     uint8_t *body; uint32_t blen;
     bool have_ske = false;
-    uint8_t server_pub[32]; uint16_t sig_alg = 0; uint8_t sig[600]; uint32_t sig_len = 0;
-    uint8_t ske_params[64]; uint32_t ske_params_len = 0;
+    uint8_t server_pub[65]; uint32_t server_pub_len = 0; uint16_t kx_curve = 0;
+    uint16_t sig_alg = 0; uint8_t sig[600]; uint32_t sig_len = 0;
+    uint8_t ske_params[72]; uint32_t ske_params_len = 0;
 
     for (;;) {
         int ht = hs_next(t, &body, &blen);
@@ -212,14 +220,18 @@ static int tls_handshake(tls_t *t, const char *host, uint16_t port) {
             memcpy(g_certs, body + 3, total); g_certs_len = total;
         } else if (ht == 12) {               /* ServerKeyExchange */
             if (blen < 4 || body[0] != 3) { strlcpy(t->err, "unexpected key exchange", sizeof t->err); return -1; }
-            uint16_t curve = be16(body + 1);
-            if (curve != 0x001D) { strlcpy(t->err, "server did not pick x25519", sizeof t->err); return -1; }
+            kx_curve = be16(body + 1);
             uint8_t publen = body[3];
-            if (publen != 32 || blen < 4 + 32 + 4) return -1;
-            memcpy(server_pub, body + 4, 32);
-            ske_params_len = 4 + 32;         /* curve_type..pubkey, signed by server */
+            if (kx_curve == 0x001D) {        /* x25519 */
+                if (publen != 32) return -1;
+            } else if (kx_curve == 0x0017) { /* secp256r1 / P-256 */
+                if (publen != 65 || body[4] != 0x04) return -1;
+            } else { strlcpy(t->err, "server picked an unsupported curve", sizeof t->err); return -1; }
+            if (blen < 4u + publen + 4u) return -1;
+            memcpy(server_pub, body + 4, publen); server_pub_len = publen;
+            ske_params_len = 4u + publen;    /* curve_type..pubkey, signed by server */
             memcpy(ske_params, body, ske_params_len);
-            uint32_t q = 4 + 32;
+            uint32_t q = 4u + publen;
             sig_alg = be16(body + q); q += 2;
             sig_len = be16(body + q); q += 2;
             if (sig_len > sizeof sig || q + sig_len > blen) return -1;
@@ -233,19 +245,31 @@ static int tls_handshake(tls_t *t, const char *host, uint16_t port) {
     if (!have_ske) { strlcpy(t->err, "no ECDHE key exchange (server may require RSA kx)", sizeof t->err); return -1; }
 
     /* verify the certificate chain + the signed ECDHE params */
-    uint8_t signed_data[64 + 64];
+    uint8_t signed_data[64 + 72];
     memcpy(signed_data, t->client_random, 32);
     memcpy(signed_data + 32, t->server_random, 32);
     memcpy(signed_data + 64, ske_params, ske_params_len);
     char verr[96] = "";
+    TR("verifying chain (curve=0x%04x, sig_alg=0x%04x)\n", kx_curve, sig_alg);
     int v = x509_verify_chain(g_certs, g_certs_len, host, signed_data, 64 + ske_params_len, sig, sig_len, sig_alg, server_pub, verr, sizeof verr);
     if (v != 0) { snprintf(t->err, sizeof t->err, "certificate: %s", verr[0] ? verr : "verification failed"); return -1; }
+    TR("chain OK; deriving keys\n");
 
-    /* ECDHE: our key pair, shared secret */
-    uint8_t priv[32], pub[32], premaster[32];
-    get_random(priv, 32); priv[0] &= 248; priv[31] = (priv[31] & 127) | 64;
-    x25519_base(pub, priv);
-    x25519(premaster, priv, server_pub);
+    /* ECDHE: our key pair + shared secret (premaster), for whichever curve the server chose */
+    uint8_t priv[32], premaster[32], client_pub[65]; uint32_t client_pub_len;
+    get_random(priv, 32);
+    if (kx_curve == 0x001D) {                /* x25519 */
+        priv[0] &= 248; priv[31] = (priv[31] & 127) | 64;
+        x25519_base(client_pub, priv);
+        x25519(premaster, priv, server_pub);
+        client_pub_len = 32;
+    } else {                                 /* secp256r1 / P-256 */
+        p256_scalar_reduce(priv);
+        p256_keygen(priv, client_pub);
+        if (p256_ecdh(priv, server_pub, premaster) != 0) { strlcpy(t->err, "P-256 ECDHE failed (bad server point)", sizeof t->err); return -1; }
+        client_pub_len = 65;
+    }
+    (void)server_pub_len;
 
     /* derive master secret + key block */
     uint8_t seed[64];
@@ -256,15 +280,19 @@ static int tls_handshake(tls_t *t, const char *host, uint16_t port) {
     tls_prf(t->master, 48, "key expansion", kseed, 64, kb, 40);
     memcpy(t->cwk, kb, 16); memcpy(t->swk, kb + 16, 16); memcpy(t->civ, kb + 32, 4); memcpy(t->siv, kb + 36, 4);
 
-    /* ClientKeyExchange: our pubkey */
-    uint8_t cke[5 + 32]; cke[0] = 16; cke[1] = 0; cke[2] = 0; cke[3] = 33; cke[4] = 32; memcpy(cke + 5, pub, 32);
-    hs_add(cke, 5 + 32);
-    if (!rec_send(t, REC_HANDSHAKE, cke, 5 + 32)) return -1;
+    /* ClientKeyExchange: our ECDHE public key (1-byte length prefix + point) */
+    uint8_t cke[5 + 65]; uint32_t ckelen = 5 + client_pub_len;
+    cke[0] = 16; cke[1] = 0; cke[2] = 0; cke[3] = (uint8_t)(1 + client_pub_len);
+    cke[4] = (uint8_t)client_pub_len; memcpy(cke + 5, client_pub, client_pub_len);
+    hs_add(cke, ckelen);
+    TR("sending ClientKeyExchange (%u byte point)\n", client_pub_len);
+    if (!rec_send(t, REC_HANDSHAKE, cke, ckelen)) return -1;
 
     /* ChangeCipherSpec */
     uint8_t ccs = 1;
     if (!rec_send(t, REC_CCS, &ccs, 1)) return -1;
     t->encrypt_out = true; t->cseq = 0;
+    TR("sent CCS; sending Finished\n");
 
     /* Finished */
     uint8_t thash[32]; hs_hash(thash);
@@ -272,9 +300,11 @@ static int tls_handshake(tls_t *t, const char *host, uint16_t port) {
     uint8_t fin[16]; fin[0] = 20; fin[1] = 0; fin[2] = 0; fin[3] = 12; memcpy(fin + 4, verify, 12);
     hs_add(fin, 16);
     if (!rec_send(t, REC_HANDSHAKE, fin, 16)) return -1;
+    TR("sent Finished; waiting for server CCS\n");
 
     /* read server ChangeCipherSpec then Finished */
     int ty = rec_recv(t);
+    TR("server record type=%d\n", ty);
     if (ty != REC_CCS) { strlcpy(t->err, "expected server CCS", sizeof t->err); return -1; }
     t->decrypt_in = true; t->sseq = 0;
     hs_rec_len = hs_rec_off = 0;

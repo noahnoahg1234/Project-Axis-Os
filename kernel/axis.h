@@ -368,6 +368,9 @@ void aes_gcm_seal(const uint8_t *key, int bits, const uint8_t iv[12], const uint
 int aes_gcm_open(const uint8_t *key, int bits, const uint8_t iv[12], const uint8_t *aad, uint32_t aadlen, const uint8_t *ct, uint32_t ctlen, const uint8_t tag[16], uint8_t *pt);
 void x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point);
 void x25519_base(uint8_t *pub, const uint8_t *priv);
+void p256_scalar_reduce(uint8_t s[32]);
+void p256_keygen(const uint8_t priv[32], uint8_t pub[65]);
+int p256_ecdh(const uint8_t priv[32], const uint8_t peer[65], uint8_t out[32]);
 /* net.c TCP streaming (for TLS) */
 int tcp_connect(uint32_t ip, uint16_t port);
 int tcp_write(const void *data, uint32_t len);

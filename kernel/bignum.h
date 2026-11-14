@@ -41,6 +41,10 @@ static int bn_cmp(const bn_t *a,const bn_t *b){
 }
 static int bn_getbit(const bn_t *a,int i){ return (a->w[i/32]>>(i%32))&1; }
 static void bn_shl1(bn_t *a){ uint32_t c=0; for(int i=0;i<BN_W;i++){ uint32_t nc=a->w[i]>>31; a->w[i]=(a->w[i]<<1)|c; c=nc; } }
+/* width-bounded variants (operate only on the low w limbs; the rest stay 0) */
+static int bn_cmp_w(const bn_t *a,const bn_t *b,int w){ for(int i=w-1;i>=0;i--){ if(a->w[i]<b->w[i]) return -1; if(a->w[i]>b->w[i]) return 1; } return 0; }
+static void bn_sub_w(bn_t *r,const bn_t *a,const bn_t *b,int w){ int64_t br=0; for(int i=0;i<w;i++){ int64_t s=(int64_t)a->w[i]-b->w[i]-br; if(s<0){s+=((int64_t)1<<32);br=1;}else br=0; r->w[i]=(uint32_t)s; } }
+static void bn_shl1_w(bn_t *a,int w){ uint32_t c=0; for(int i=0;i<w;i++){ uint32_t nc=a->w[i]>>31; a->w[i]=(a->w[i]<<1)|c; c=nc; } }
 /* a += b (ignores final carry past BN_W) */
 static void bn_add(bn_t *r,const bn_t *a,const bn_t *b){
     uint64_t c=0; for(int i=0;i<BN_W;i++){ uint64_t s=(uint64_t)a->w[i]+b->w[i]+c; r->w[i]=(uint32_t)s; c=s>>32; }
@@ -52,11 +56,12 @@ static void bn_sub(bn_t *r,const bn_t *a,const bn_t *b){
 /* r = a mod m  (bit-by-bit; a may be full-width) */
 static void bn_mod(bn_t *r,const bn_t *a,const bn_t *m){
     bn_t rem; bn_zero(&rem);
+    int mw=(bn_bits(m)+31)/32, W=mw+1;
     int top=bn_bits(a);
     for(int i=top-1;i>=0;i--){
-        bn_shl1(&rem);
+        bn_shl1_w(&rem,W);
         rem.w[0] |= bn_getbit(a,i);
-        if(bn_cmp(&rem,m)>=0){ bn_t t; bn_sub(&t,&rem,m); bn_copy(&rem,&t); }
+        if(bn_cmp_w(&rem,m,W)>=0) bn_sub_w(&rem,&rem,m,W);
     }
     bn_copy(r,&rem);
 }
@@ -74,14 +79,15 @@ static void bn_mulmod(bn_t *r,const bn_t *a,const bn_t *b,const bn_t *m){
         }
         prod[i+bw]+=(uint32_t)c;
     }
-    /* reduce prod mod m, bit by bit from the top */
+    /* reduce prod mod m, bit by bit from the top (width-bounded to m's size) */
     bn_t rem; bn_zero(&rem);
+    int mw=(bn_bits(m)+31)/32, W=mw+1;
     int topbit=2*BN_W*32;
     while(topbit>0 && ((prod[(topbit-1)/32]>>((topbit-1)%32))&1)==0) topbit--;
     for(int i=topbit-1;i>=0;i--){
-        bn_shl1(&rem);
+        bn_shl1_w(&rem,W);
         rem.w[0] |= (prod[i/32]>>(i%32))&1;
-        if(bn_cmp(&rem,m)>=0){ bn_t t; bn_sub(&t,&rem,m); bn_copy(&rem,&t); }
+        if(bn_cmp_w(&rem,m,W)>=0) bn_sub_w(&rem,&rem,m,W);
     }
     bn_copy(r,&rem);
 }
