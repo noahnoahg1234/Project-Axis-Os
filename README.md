@@ -35,11 +35,12 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **Settings app** | `settings` / `control` / `bsdconfig`: default system, boot timeout, colour theme (6), autocorrect, advanced-at-boot, delete confirmations, auto-save, hidden files, 12/24-hour clock, time zone, computer name, user name, switch system now, reset files. |
 | **Advanced mode** | Harder to use, more powerful: no autocorrect, no confirmations, terse `?` errors, a root prompt (`#`), a hex view in the explorer, and expert commands (`peek`, `poke`, `inb`, `outb`, `sector`, `cpuid`, `heap`, `dmesg`, `hexdump`, `format`, `panic`). Turn it on with `advanced on`, `su`, `sudo <cmd>`, or the A key in the boot menu. |
 | **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks, downloading files (W), **and a built-in JavaScript engine** (MiniJS) that runs classic inline scripts (document.write, loops, functions, Math); press J to toggle it. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
+| **Google APIs** | `google`: use real Google services (e.g. the **YouTube Data API**) with your own API key. AxisOS can't do https, so a tiny helper (`tools/google-bridge.py`) runs on your PC and bridges AxisOS's http to Google's https. `google bridge <host>`, `google key youtube <KEY>`, `google get <url>`, `google yt <method> <params>` - usable from the shell and scripts, and by programs via the `gapi_*` C functions. |
 | **Networking** | Two network-card drivers (Intel **e1000** and Realtek **RTL8139**), auto-detected, with DHCP, DNS, TCP and HTTP, link detection, DNS caching with fallback to public resolvers (1.1.1.1 / 8.8.8.8), and a reachability check. `net` shows status, `net test` diagnoses the connection, `net reconnect` re-runs DHCP; `ifconfig` shows `link` and `internet` status. Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
 | **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), BlockWorld, Tetris, 2048, Tic-Tac-Toe, Pong, Hangman, Guess the Number (Games), Todo List, Unit Converter (Tools). Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
 | **BlockWorld** | A built-in Minecraft-style block sandbox (`blockworld`, also `mine` / `craft`, or install it from the App Store). Explore biomes (plains, forest, desert, snow, jungle, mountains, oceans), swim in flowing water, mine and place blocks, an inventory and hotbar GUI, crafting, mobs (pigs, cows, sheep, zombies, skeletons, spiders, creepers), health, day/night, **Survival and Creative** modes, a **cheat console** (`/creative`, `/give`, `/tp`, `/time`, `/spawn`, `/fly`, ...), and **saved worlds** in `/Worlds`. Keyboard or mouse. |
-| **ClassicTube** | `classictube` (also `youtube` / `yt` / `tube`): a YouTube-style video app rendered entirely in colour text. A browsable list of video **names** with a live animated preview, a full-screen **player** that converts each video frame into multi-colour text (a half-block converter turns two pixels into one cell), and a vertical **Shorts** feed. The videos are procedurally generated animations (plasma, starfield, fire, matrix rain, fireworks, a cat...), since AxisOS has no real video decoding. |
+| **ClassicTube** | `classictube` (also `youtube` / `yt`): a YouTube app in colour text. With a Google API key set up (see below) it shows **real YouTube** - trending and search results with real titles, channels, view counts and **thumbnails converted to colour text** - plus a vertical **Shorts** feed, no login/profiles. It can't decode the video stream (text-mode OS), so a video shows its live thumbnail and info. Without a key it runs an **offline demo** of procedurally generated clips (plasma, fire, matrix rain, starfield...). |
 | **JavaScript (MiniJS)** | A tiny JS interpreter in the browser: variables, `+ - * / %`, comparisons, `&& || !`, `?:`, `if`/`while`/`for`, functions with recursion, and `document.write`, `console.log`, `alert`, `parseInt`, `Math.*`. Classic inline scripts run and inject page content. Integer math only - it is not a full engine, so modern web apps won't run. Also a `js` shell command. |
 | **7-Zip (AxisZip)** | `7z` / `zip` / `unzip`: create and open real `.zip` files, with a built-in DEFLATE decoder so it extracts compressed zips (not just stored ones). `7z a out.zip files`, `7z x file.zip`, `7z l file.zip`. |
 | **Media Player** | `player` (also `media` / `music`): plays music through the **PC speaker** - built-in public-domain tunes plus your own `.sng` files in `/Music` - with a playlist and an animated bar visualizer. |
@@ -109,6 +110,34 @@ store                    App Store (games, paint, calculator ...)
 shello                   retro shell (BYE to leave)
 ```
 
+## Real YouTube (and other Google APIs)
+
+ClassicTube can show **real YouTube** using the **YouTube Data API** and your own
+**Google API key** (the "service code"). Because AxisOS cannot make secure https
+connections, a small helper runs on your PC and forwards requests to Google.
+
+1. Get a free API key: open https://console.cloud.google.com/apis/credentials,
+   create an **API key**, and enable **YouTube Data API v3**.
+2. On your PC, run the bridge (optional: `pip install pillow` for thumbnails):
+   ```bash
+   python3 tools/google-bridge.py
+   ```
+   It prints your PC's address and listens on port 8099.
+3. In AxisOS:
+   ```
+   google bridge <your-PC-ip>:8099
+   google key youtube <YOUR_API_KEY>
+   classictube
+   ```
+
+ClassicTube now shows real trending videos and search results (titles, channels,
+view counts and thumbnails as colour text). It can't play the video itself - a
+text-mode OS has no video codec - so it shows the live thumbnail and the video's
+info. No account or login is used, only the API key.
+
+Any program can use Google services the same way: `google get <api-url>` prints
+JSON for scripts, and native apps call the `gapi_*` functions.
+
 ## App repositories
 
 AxisOS can't make secure https:// connections, so online app repositories must be served over plain http://.
@@ -146,7 +175,8 @@ kernel/blockworld.c BlockWorld sandbox game (biomes, water, mobs)
 kernel/zip.c        AxisZip (7-Zip-style) with a DEFLATE decoder
 kernel/mediaplayer.c PC-speaker music player
 kernel/minijs.c     tiny JavaScript engine for the browser
-kernel/classictube.c YouTube-style video app (colour-text videos & Shorts)
+kernel/classictube.c YouTube app (real via the API, or an offline demo)
+kernel/gapi.c       Google API client (YouTube Data API via the PC bridge)
 kernel/shello.c     Shello retro shell
 kernel/desktop.c    retro text-mode mouse desktop
 kernel/compat.c     Linux/FreeBSD ELF loader + system-call layer
@@ -159,6 +189,7 @@ kernel/apps.c       settings app, pager, dialogs
 kernel/*.c          console, keyboard, ATA disk, RTC, serial, interrupts, heap
 tools/mkimage.py    builds the disk image
 tools/smoketest.py  automated QEMU test
+tools/google-bridge.py  PC helper that bridges AxisOS http to Google https
 store/              sample online app repository (apps + Linux/FreeBSD programs)
 programs/           sample Linux/FreeBSD programs and how to build them
 ```

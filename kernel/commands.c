@@ -1879,6 +1879,7 @@ static int c_blockworld(int argc, char **argv) { (void)argc; (void)argv; if (con
 static int c_zip(int argc, char **argv) { return zip_cmd(argc, argv); }
 static int c_media(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return mediaplayer_run(); }
 static int c_classictube(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return classictube_run(); }
+static int c_google(int argc, char **argv) { return google_cmd(argc, argv); }
 static int c_js(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: js <code>   e.g. js document.write(2+2)\n"); return 1; }
     char code[512] = "";
@@ -2017,6 +2018,7 @@ const command_t commands[] = {
     {"player",    "player",    "player",    "media|music|mplayer|vlc|wmp", c_media,     "player",                      "Media player (music & art)", 0},
     {"js",        "js",        "js",        "javascript",            c_js,         "js <code>",                   "Run a snippet of JavaScript", 0},
     {"classictube","classictube","classictube","youtube|yt|tube|video|videos", c_classictube, "classictube",              "ClassicTube video app", 0},
+    {"google",    "google",    "google",    "gapi|gcloud|service",        c_google,     "google bridge|key|get|yt|status", "Use Google APIs via a PC bridge", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
     {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},
     {"runprog",   "runprog",   "runprog",   "linux|wine|exec|launch",     c_runprog,    "runprog ./program [args]",    "Run a Linux/FreeBSD program", 0},

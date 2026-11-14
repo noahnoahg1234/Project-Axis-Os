@@ -553,7 +553,7 @@ pm_entry:
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    mov esp, 0x90000
+    mov esp, 0x1F0000
     mov eax, 0x10000
     jmp eax
 

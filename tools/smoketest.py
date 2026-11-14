@@ -176,6 +176,14 @@ out = vm.run("ls /Worlds", "$")
 check("BlockWorld saves worlds to disk", "SmokeWorld" in out, out)
 vm.close()
 
+# --------------------------------------------------- Google API layer ------
+vm, ok = boot("1", "$")
+out = vm.run("google bridge 10.0.2.2:9", "$", 8)
+out = vm.run("google key youtube TESTKEY123", "$", 8)
+out = vm.run("google status", "$", 8)
+check("Google API config stored", "key stored" in out and "10.0.2.2:9" in out, out)
+vm.close()
+
 # -------------------------------------------------------- ClassicTube ------
 vm, ok = boot("1", "$")
 vm.type("classictube\r")

@@ -8,7 +8,7 @@ extern __bss_end
 
 _start:
     cli
-    mov esp, 0x90000
+    mov esp, 0x1F0000
     cld
     ; clear .bss
     mov edi, __bss_start

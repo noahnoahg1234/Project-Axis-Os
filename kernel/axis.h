@@ -360,6 +360,20 @@ bool str_to_ip(const char *s, uint32_t *ip);
 bool url_split(const char *url, char *host, size_t hn, uint16_t *port, char *path, size_t pn);
 int http_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total));
 const char *http_strerror(int e);
+/* gapi.c - Google API client (via a PC bridge) */
+const char *gapi_bridge(void);
+bool gapi_configured(void);
+void gapi_set_bridge(const char *host);
+bool gapi_key(const char *service, char *out, size_t n);
+void gapi_set_key(const char *service, const char *key);
+int gapi_fetch(const char *google_url, http_resp_t *r);
+int gapi_youtube(const char *method, const char *params, http_resp_t *r);
+int gapi_thumb(const char *video_id, int w, int h, uint8_t *out);
+const char *json_find(const char *json, const char *key);
+const char *json_str(const char *p, char *out, size_t n);
+bool json_field(const char **p, const char *end, const char *key, char *out, size_t n);
+int google_cmd(int argc, char **argv);
+
 
 /* --------------------------------------------------------- apps --------- */
 int browser_run(const char *url);
