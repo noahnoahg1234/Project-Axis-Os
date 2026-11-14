@@ -333,7 +333,7 @@ typedef struct {
     char location[512];
     char ctype[64];
 } http_resp_t;
-enum { HTTP_ENONET = -1, HTTP_EURL = -2, HTTP_EDNS = -3, HTTP_ECONN = -4, HTTP_EPROTO = -5, HTTP_EABORT = -6 };
+enum { HTTP_ENONET = -1, HTTP_EURL = -2, HTTP_EDNS = -3, HTTP_ECONN = -4, HTTP_EPROTO = -5, HTTP_EABORT = -6, HTTP_ETLS = -7 };
 extern uint8_t net_mac[6];
 extern uint32_t net_ip, net_mask, net_gw, net_dns;
 bool net_init(void);
@@ -360,6 +360,25 @@ bool str_to_ip(const char *s, uint32_t *ip);
 bool url_split(const char *url, char *host, size_t hn, uint16_t *port, char *path, size_t pn);
 int http_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total));
 const char *http_strerror(int e);
+/* crypto.c + tls.c */
+void sha256(const void *data, uint32_t len, uint8_t out[32]);
+void hmac_sha256(const uint8_t *key, uint32_t klen, const uint8_t *msg, uint32_t mlen, uint8_t out[32]);
+void tls_prf(const uint8_t *secret, uint32_t slen, const char *label, const uint8_t *seed, uint32_t seedlen, uint8_t *out, uint32_t outlen);
+void aes_gcm_seal(const uint8_t *key, int bits, const uint8_t iv[12], const uint8_t *aad, uint32_t aadlen, const uint8_t *pt, uint32_t ptlen, uint8_t *ct, uint8_t tag[16]);
+int aes_gcm_open(const uint8_t *key, int bits, const uint8_t iv[12], const uint8_t *aad, uint32_t aadlen, const uint8_t *ct, uint32_t ctlen, const uint8_t tag[16], uint8_t *pt);
+void x25519(uint8_t *out, const uint8_t *scalar, const uint8_t *point);
+void x25519_base(uint8_t *pub, const uint8_t *priv);
+/* net.c TCP streaming (for TLS) */
+int tcp_connect(uint32_t ip, uint16_t port);
+int tcp_write(const void *data, uint32_t len);
+void tcp_close(void);
+uint32_t tcp_recv(uint8_t *buf, uint32_t want, uint32_t timeout_ticks);
+bool tcp_is_open(void);
+bool user_abort(void);
+/* tls.c - HTTPS client */
+int https_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total));
+bool tls_available(void);
+
 /* gapi.c - Google API client (via a PC bridge) */
 const char *gapi_bridge(void);
 bool gapi_configured(void);

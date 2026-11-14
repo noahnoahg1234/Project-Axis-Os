@@ -1777,10 +1777,6 @@ static int c_wget(int argc, char **argv) {
         kprintf("usage: %s http://host/path [-o file]\n", argv[0]);
         return 1;
     }
-    if (!strncasecmp(url, "https://", 8)) {
-        shell_print_error(E_INVAL, "https is not supported - use an http:// address");
-        return 1;
-    }
     char full[512];
     if (!strstr(url, "://")) snprintf(full, sizeof full, "http://%s", url);
     else strlcpy(full, url, sizeof full);
@@ -1789,12 +1785,14 @@ static int c_wget(int argc, char **argv) {
     for (int hops = 0; hops < 5; hops++) {
         if (!curl && !con_capturing()) kprintf("Fetching %s\n", full);
         st = http_get(full, &r, (curl || con_capturing()) ? NULL : dl_progress);
-        if (st >= 300 && st < 400 && r.location[0] && strncasecmp(r.location, "https://", 8)) {
+        if (st >= 300 && st < 400 && r.location[0]) {
             if (r.location[0] == '/') {
+                /* relative redirect: keep the current scheme and host */
+                bool sec = !strncasecmp(full, "https://", 8);
                 char host[128], path[512];
                 uint16_t port;
                 url_split(full, host, sizeof host, &port, path, sizeof path);
-                snprintf(full, sizeof full, "http://%s:%u%s", host, port, r.location);
+                snprintf(full, sizeof full, "%s://%s:%u%s", sec ? "https" : "http", host, port, r.location);
             } else
                 strlcpy(full, r.location, sizeof full);
             kfree(r.body);
@@ -1809,7 +1807,7 @@ static int c_wget(int argc, char **argv) {
     }
     if (st >= 300 && st < 400) {
         kfree(r.body);
-        shell_print_error(E_INVAL, "redirected to an https:// address, which AxisOS cannot fetch");
+        shell_print_error(E_INVAL, "too many redirects");
         return 1;
     }
     if (curl && !out) {
@@ -1820,7 +1818,9 @@ static int c_wget(int argc, char **argv) {
     char name[FS_NAME_MAX];
     if (out) strlcpy(name, out, sizeof name);
     else {
-        const char *q = strrchr(full + 7, '/');
+        const char *afterscheme = strstr(full, "://");
+        afterscheme = afterscheme ? afterscheme + 3 : full;
+        const char *q = strrchr(afterscheme, '/');
         strlcpy(name, q && q[1] ? q + 1 : "index.html", sizeof name);
         char *qq = strchr(name, '?');
         if (qq) *qq = 0;
@@ -2018,7 +2018,7 @@ const command_t commands[] = {
     {"player",    "player",    "player",    "media|music|mplayer|vlc|wmp", c_media,     "player",                      "Media player (music & art)", 0},
     {"js",        "js",        "js",        "javascript",            c_js,         "js <code>",                   "Run a snippet of JavaScript", 0},
     {"classictube","classictube","classictube","youtube|yt|tube|video|videos", c_classictube, "classictube",              "ClassicTube video app", 0},
-    {"google",    "google",    "google",    "gapi|gcloud|service",        c_google,     "google bridge|key|get|yt|status", "Use Google APIs via a PC bridge", 0},
+    {"google",    "google",    "google",    "gapi|gcloud|service",        c_google,     "google key|get|yt|status", "Use Google APIs over secure HTTPS", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
     {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},
     {"runprog",   "runprog",   "runprog",   "linux|wine|exec|launch",     c_runprog,    "runprog ./program [args]",    "Run a Linux/FreeBSD program", 0},

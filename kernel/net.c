@@ -401,7 +401,7 @@ static struct {
     uint16_t lport, rport;
     uint32_t snd_nxt, snd_una, rcv_nxt;
     uint8_t *rx;
-    uint32_t rxlen, rxcap;
+    uint32_t rxlen, rxcap, rxcons;
     bool remote_closed, reset;
     uint32_t rx_limit;
 } tc;
@@ -923,7 +923,7 @@ bool net_resolve(const char *host, uint32_t *ip) {
 }
 
 /* ---- TCP --------------------------------------------------------------- */
-static bool user_abort(void) {
+bool user_abort(void) {
     int k = kbd_trygetkey();
     return k == KEY_ESC || k == KEY_CTRL('c');
 }
@@ -932,6 +932,27 @@ static void tcp_reset_state(void) {
     kfree(tc.rx);
     memset(&tc, 0, sizeof tc);
 }
+
+/* ---- streaming read for TLS: consume bytes from the TCP stream -------- */
+bool user_abort(void);
+uint32_t tcp_recv(uint8_t *buf, uint32_t want, uint32_t timeout_ticks) {
+    uint32_t start = ticks, got = 0;
+    while (got < want) {
+        net_poll();
+        uint32_t avail = tc.rxlen - tc.rxcons;
+        if (avail) {
+            uint32_t t = want - got; if (t > avail) t = avail;
+            memcpy(buf + got, tc.rx + tc.rxcons, t);
+            tc.rxcons += t; got += t; start = ticks; continue;
+        }
+        if (tc.remote_closed || tc.reset) break;
+        if (ticks - start > timeout_ticks) break;
+        if (user_abort()) break;
+        cpu_hlt();
+    }
+    return got;
+}
+bool tcp_is_open(void) { return !tc.reset && (tc.state == 2 /*T_EST*/ || tc.rxlen > tc.rxcons); }
 
 int tcp_connect(uint32_t ip, uint16_t port) {
     tcp_reset_state();
@@ -1041,6 +1062,7 @@ static int find_header(const char *hdr, const char *name, char *out, size_t n) {
 
 /* returns HTTP status, or a negative error */
 int http_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total)) {
+    if (!strncasecmp(url, "https://", 8)) return https_get(url, r, progress);
     memset(r, 0, sizeof *r);
     if (!net_up()) return HTTP_ENONET;
     char host[128], path[512];
@@ -1139,11 +1161,12 @@ int http_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uin
 const char *http_strerror(int e) {
     switch (e) {
     case HTTP_ENONET: return "network is down (no network card found)";
-    case HTTP_EURL: return "unsupported address (only http:// can be fetched directly)";
+    case HTTP_EURL: return "unsupported address (use http:// or https://)";
     case HTTP_EDNS: return "could not find that host name (DNS lookup failed)";
     case HTTP_ECONN: return "could not connect to the server";
     case HTTP_EPROTO: return "the server sent an invalid reply";
     case HTTP_EABORT: return "cancelled";
+    case HTTP_ETLS: return "secure connection failed (TLS handshake or certificate check)";
     }
     return "unknown error";
 }

@@ -412,22 +412,15 @@ static void url_encode(const char *in, char *out, size_t n) {
     out[o] = 0;
 }
 
-static void via_frogfind(const char *https_url, char *out, size_t n) {
-    snprintf(out, n, "http://frogfind.com/read.php?a=%s", https_url);
-}
-
 /* resolve href against the current page */
 static void resolve_url(const char *base, const char *href, char *out, size_t n) {
-    if (!strncasecmp(href, "http://", 7) || !strncasecmp(href, "about:", 6) || !strncasecmp(href, "file:", 5)) {
+    if (!strncasecmp(href, "http://", 7) || !strncasecmp(href, "https://", 8) ||
+        !strncasecmp(href, "about:", 6) || !strncasecmp(href, "file:", 5)) {
         strlcpy(out, href, n);
         return;
     }
-    if (!strncasecmp(href, "https://", 8)) {
-        via_frogfind(href, out, n);
-        return;
-    }
     if (!strncmp(href, "//", 2)) {
-        snprintf(out, n, "http:%s", href);
+        snprintf(out, n, "%s:%s", !strncasecmp(base, "https://", 8) ? "https" : "http", href);
         return;
     }
     if (!strncasecmp(base, "file:", 5)) {
@@ -486,8 +479,8 @@ static const char *home_html =
     "<li><b>Backspace</b> or <b>Left</b> back, <b>F</b> forward, <b>R</b> reload, <b>H</b> home</li>"
     "<li><b>G</b> go to address, <b>S</b> search, <b>B</b> bookmark page, <b>D</b> save page text, <b>W</b> download a link, <b>J</b> toggle JavaScript, <b>L</b> link by number, <b>Q</b> quit</li>"
     "</ul><h2>Notes</h2>"
-    "<p>AxisOS speaks plain http://. Secure https:// pages are opened through FrogFind automatically, which "
-    "shows a simplified, readable version. Local files work too: try <a href=\"file:/usr/share/doc/axis-guide.txt\">the AxisOS guide</a>.</p>";
+    "<p>AxisOS speaks both http:// and secure https:// (its own built-in TLS 1.2, with "
+    "certificate checking). Local files work too: try <a href=\"file:/usr/share/doc/axis-guide.txt\">the AxisOS guide</a>.</p>";
 
 static char *bookmarks_html(void) {
     char path[300];
@@ -627,7 +620,7 @@ static bool is_html(const char *ctype, const char *body) {
 static void load(const char *input, bool push) {
     char url[512];
     /* decide what the user typed */
-    if (!strncasecmp(input, "https://", 8)) via_frogfind(input, url, sizeof url);
+    if (!strncasecmp(input, "https://", 8)) strlcpy(url, input, sizeof url); /* native TLS */
     else if (!strncasecmp(input, "http://", 7) || !strncasecmp(input, "about:", 6) || !strncasecmp(input, "file:", 5))
         strlcpy(url, input, sizeof url);
     else if (input[0] == '/' || input[0] == '~' || input[0] == '\\' || (isalpha(input[0]) && input[1] == ':')) {
@@ -791,14 +784,14 @@ static void download(void) {
     if (strncasecmp(url, "http://", 7) && strncasecmp(url, "https://", 8)) { snprintf(status, sizeof status, "Can only download http(s) links."); return; }
     /* default filename from the URL */
     char name[FS_NAME_MAX];
-    const char *slash = strrchr(url + 7, '/');
+    const char *afterscheme = strstr(url, "://");
+    const char *slash = strrchr(afterscheme ? afterscheme + 3 : url, '/');
     strlcpy(name, slash && slash[1] ? slash + 1 : "download.bin", sizeof name);
     char *q = strchr(name, '?'); if (q) *q = 0;
     if (!name[0] || !fs_valid_name(name)) strcpy(name, "download.bin");
     if (!tui_prompt("Download", "Save the linked file as:", name, sizeof name) || !name[0]) return;
     char full[520];
-    if (!strncasecmp(url, "https://", 8)) via_frogfind(url, full, sizeof full);
-    else strlcpy(full, url, sizeof full);
+    strlcpy(full, url, sizeof full);   /* http:// and https:// both fetched natively */
     scr_fill(0, 23, SCREEN_W, 1, ' ', theme.normal);
     scr_printf(1, 23, theme.accent, "Downloading %.60s ...", full);
     http_resp_t r;

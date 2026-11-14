@@ -34,8 +34,9 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **Text editor** | `nano` / `edit` / `ee`: full-screen editor with save, find, cut/paste line and go-to-line. |
 | **Settings app** | `settings` / `control` / `bsdconfig`: default system, boot timeout, colour theme (6), autocorrect, advanced-at-boot, delete confirmations, auto-save, hidden files, 12/24-hour clock, time zone, computer name, user name, switch system now, reset files. |
 | **Advanced mode** | Harder to use, more powerful: no autocorrect, no confirmations, terse `?` errors, a root prompt (`#`), a hex view in the explorer, and expert commands (`peek`, `poke`, `inb`, `outb`, `sector`, `cpuid`, `heap`, `dmesg`, `hexdump`, `format`, `panic`). Turn it on with `advanced on`, `su`, `sudo <cmd>`, or the A key in the boot menu. |
-| **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks, downloading files (W), **and a built-in JavaScript engine** (MiniJS) that runs classic inline scripts (document.write, loops, functions, Math); press J to toggle it. Plain `http://` sites load directly; `https://` sites and web searches (S key) go through [FrogFind](http://frogfind.com), which serves simple http versions of any page. |
-| **Google APIs** | `google`: use real Google services (e.g. the **YouTube Data API**) with your own API key. AxisOS can't do https, so a tiny helper (`tools/google-bridge.py`) runs on your PC and bridges AxisOS's http to Google's https. `google bridge <host>`, `google key youtube <KEY>`, `google get <url>`, `google yt <method> <params>` - usable from the shell and scripts, and by programs via the `gapi_*` C functions. |
+| **Web browser** | `browser` / `msedge` / `lynx`: text-mode browser with links, history, bookmarks, downloading files (W), **and a built-in JavaScript engine** (MiniJS) that runs classic inline scripts (document.write, loops, functions, Math); press J to toggle it. Both `http://` **and secure `https://`** sites load directly over AxisOS's own TLS stack. Web search (S key) uses [FrogFind](http://frogfind.com). |
+| **Secure HTTPS (TLS)** | A from-scratch **TLS 1.2** client (`kernel/tls.c` + `kernel/crypto.c`): X25519 ECDHE key exchange, AES-128-GCM records, SHA-256/HMAC/PRF, and **X.509 certificate-chain validation** (`kernel/x509.c`) with RSA (PKCS#1 v1.5) and ECDSA P-256 signatures, hostname (SAN/CN) and validity checks against a built-in root-CA store (Google Trust Services, ISRG/Let's Encrypt, DigiCert, GlobalSign). `https://` works everywhere `http://` does - browser, `wget`/`curl`, and the Google APIs - with **no PC helper**. |
+| **Google APIs** | `google`: use real Google services (e.g. the **YouTube Data API**) with your own API key, connecting straight to Google over AxisOS's built-in secure HTTPS. `google key youtube <KEY>`, `google get <url>`, `google yt <method> <params>`, `google status` - usable from the shell and scripts, and by programs via the `gapi_*` C functions. (The old `tools/google-bridge.py` PC helper still works as an optional fallback via `google bridge <host>`, but is no longer required.) |
 | **Networking** | Two network-card drivers (Intel **e1000** and Realtek **RTL8139**), auto-detected, with DHCP, DNS, TCP and HTTP, link detection, DNS caching with fallback to public resolvers (1.1.1.1 / 8.8.8.8), and a reachability check. `net` shows status, `net test` diagnoses the connection, `net reconnect` re-runs DHCP; `ifconfig` shows `link` and `internet` status. Commands: `ifconfig` / `ipconfig`, `ping`, `nslookup`, `wget` / `curl`. QEMU's default network card works with no extra options. |
 | **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), BlockWorld, Tetris, 2048, Tic-Tac-Toe, Pong, Hangman, Guess the Number (Games), Todo List, Unit Converter (Tools). Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
@@ -113,22 +114,17 @@ shello                   retro shell (BYE to leave)
 ## Real YouTube (and other Google APIs)
 
 ClassicTube can show **real YouTube** using the **YouTube Data API** and your own
-**Google API key** (the "service code"). Because AxisOS cannot make secure https
-connections, a small helper runs on your PC and forwards requests to Google.
+**Google API key** (the "service code"). AxisOS connects **straight to Google over
+its own secure HTTPS** (TLS 1.2, with certificate checking) - no PC helper needed.
 
 1. Get a free API key: open https://console.cloud.google.com/apis/credentials,
    create an **API key**, and enable **YouTube Data API v3**.
-2. On your PC, run the bridge (optional: `pip install pillow` for thumbnails):
-   ```bash
-   python3 tools/google-bridge.py
+2. In AxisOS:
    ```
-   It prints your PC's address and listens on port 8099.
-3. In AxisOS:
-   ```
-   google bridge <your-PC-ip>:8099
    google key youtube <YOUR_API_KEY>
    classictube
    ```
+   (`google status` confirms "Secure HTTPS: available".)
 
 ClassicTube now shows real trending videos and search results (titles, channels,
 view counts and thumbnails as colour text). It can't play the video itself - a
@@ -138,9 +134,13 @@ info. No account or login is used, only the API key.
 Any program can use Google services the same way: `google get <api-url>` prints
 JSON for scripts, and native apps call the `gapi_*` functions.
 
+> Offline/legacy fallback: the old `tools/google-bridge.py` PC helper still works
+> if you ever need it - run it on your PC and point AxisOS at it with
+> `google bridge <your-PC-ip>:8099`. It is no longer required.
+
 ## App repositories
 
-AxisOS can't make secure https:// connections, so online app repositories must be served over plain http://.
+Online app repositories can be served over plain `http://` or secure `https://` (AxisOS handles both).
 The `store/` folder in this repository is a sample repository: `index.txt` lists the apps, one per line
 (`command|Name|Category|Description|script.sh`), next to the scripts.
 
@@ -167,7 +167,12 @@ kernel/shell.c      axsh: parser, pipes, autocorrect, history, completion
 kernel/commands.c   all built-in commands and the command table
 kernel/fs.c         AxisFS: unified case-insensitive filesystem + persistence
 kernel/explorer.c   file explorer
-kernel/net.c        e1000 driver, ARP/IP/ICMP/UDP/DHCP/DNS/TCP, HTTP client
+kernel/net.c        e1000/RTL8139 drivers, ARP/IP/ICMP/UDP/DHCP/DNS/TCP, HTTP(S) client
+kernel/crypto.c     TLS crypto: SHA-256, HMAC, PRF, AES-GCM, X25519
+kernel/tls.c        TLS 1.2 client (ECDHE + AES-128-GCM) - native https
+kernel/x509.c       X.509 certificate-chain validation (RSA + ECDSA P-256)
+kernel/bignum.h     fixed-width big integer for RSA/ECDSA
+kernel/roots.h      built-in trusted root-CA store (generated by tools/genroots.py)
 kernel/browser.c    text web browser
 kernel/store.c      App Store, installed apps, script interpreter
 kernel/games.c      Calculator, Minesweeper, Paint, Snake, Clock, Task Monitor
@@ -176,7 +181,7 @@ kernel/zip.c        AxisZip (7-Zip-style) with a DEFLATE decoder
 kernel/mediaplayer.c PC-speaker music player
 kernel/minijs.c     tiny JavaScript engine for the browser
 kernel/classictube.c YouTube app (real via the API, or an offline demo)
-kernel/gapi.c       Google API client (YouTube Data API via the PC bridge)
+kernel/gapi.c       Google API client (YouTube Data API over native HTTPS)
 kernel/shello.c     Shello retro shell
 kernel/desktop.c    retro text-mode mouse desktop
 kernel/compat.c     Linux/FreeBSD ELF loader + system-call layer
@@ -189,7 +194,8 @@ kernel/apps.c       settings app, pager, dialogs
 kernel/*.c          console, keyboard, ATA disk, RTC, serial, interrupts, heap
 tools/mkimage.py    builds the disk image
 tools/smoketest.py  automated QEMU test
-tools/google-bridge.py  PC helper that bridges AxisOS http to Google https
+tools/genroots.py   regenerates kernel/roots.h from a system CA bundle
+tools/google-bridge.py  optional legacy PC helper (no longer required)
 store/              sample online app repository (apps + Linux/FreeBSD programs)
 programs/           sample Linux/FreeBSD programs and how to build them
 ```

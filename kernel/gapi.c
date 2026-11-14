@@ -105,8 +105,14 @@ static void urlenc(const char *in, char *out, size_t n) {
     out[o] = 0;
 }
 
-/* GET a full https://...googleapis... URL through the bridge. 0=ok */
+/* GET a full https://...googleapis... URL. Native TLS first; bridge as fallback. 0=ok */
 int gapi_fetch(const char *google_url, http_resp_t *r) {
+    /* Preferred path: connect straight to Google over our own TLS stack. */
+    if (tls_available() && !strncasecmp(google_url, "https://", 8)) {
+        int st = https_get(google_url, r, NULL);
+        if (st >= 0) return st == 200 ? 0 : st;
+        /* native TLS failed - fall through to the bridge if the user set one */
+    }
     if (!gapi_configured()) return -100;
     char enc[1024];
     urlenc(google_url, enc, sizeof enc);
@@ -205,15 +211,16 @@ bool json_field(const char **p, const char *end, const char *key, char *out, siz
 /* ---- the `google` command ---------------------------------------------- */
 int google_cmd(int argc, char **argv) {
     if (argc < 2) {
-        kprintf("Google API client - use real Google services through a PC bridge.\n\n");
-        kprintf("  google bridge <host[:port]>   set the PC running google-bridge.py\n");
+        kprintf("Google API client - connects to Google over AxisOS's own secure\n");
+        kprintf("HTTPS (TLS 1.2). No PC helper needed.\n\n");
         kprintf("  google key <service> <KEY>    store an API key (e.g. youtube)\n");
-        kprintf("  google get <google-api-url>   fetch a URL (prints JSON)\n");
+        kprintf("  google get <google-api-url>   fetch an https URL (prints JSON)\n");
         kprintf("  google yt <method> <params>   call YouTube Data API v3\n");
-        kprintf("  google status                 show current configuration\n\n");
-        kprintf("Setup: run tools/google-bridge.py on your PC, get a key at\n");
-        kprintf("console.cloud.google.com (enable YouTube Data API v3), then:\n");
-        kprintf("  google bridge 192.168.1.20:8099\n  google key youtube AIza...\n  classictube\n");
+        kprintf("  google status                 show current configuration\n");
+        kprintf("  google bridge <host[:port]>   (optional) legacy PC bridge fallback\n\n");
+        kprintf("Setup: get a key at console.cloud.google.com (enable YouTube\n");
+        kprintf("Data API v3), then:\n");
+        kprintf("  google key youtube AIza...\n  classictube\n");
         return 0;
     }
     const char *sub = argv[1];
@@ -231,13 +238,14 @@ int google_cmd(int argc, char **argv) {
     }
     if (!strcasecmp(sub, "status")) {
         char key[64];
-        kprintf("Bridge:  %s\n", gapi_configured() ? gapi_bridge() : "(not set - run 'google bridge <host>')");
+        kprintf("Secure HTTPS: %s\n", tls_available() ? "available (native TLS 1.2)" : "network down");
         kprintf("YouTube: %s\n", gapi_key("youtube", key, sizeof key) ? "key stored" : "no key ('google key youtube <KEY>')");
+        kprintf("Bridge:  %s\n", gapi_configured() ? gapi_bridge() : "(not set - not needed; optional fallback)");
         kprintf("Network: %s\n", net_up() ? "up" : "down");
         return 0;
     }
     if (!strcasecmp(sub, "get") || !strcasecmp(sub, "yt")) {
-        if (!gapi_configured()) { kprintf("No bridge set. Run: google bridge <host:port>\n"); return 1; }
+        if (!net_up()) { kprintf("Network is down.\n"); return 1; }
         http_resp_t r;
         int st;
         if (!strcasecmp(sub, "yt")) {
@@ -248,7 +256,8 @@ int google_cmd(int argc, char **argv) {
             st = gapi_fetch(argv[2], &r);
         }
         if (st == -101) { kprintf("No YouTube key. Run: google key youtube <KEY>\n"); return 1; }
-        if (st < 0) { kprintf("Request failed (%d). Is the bridge running and reachable?\n", st); return 1; }
+        if (st == HTTP_ETLS) { kprintf("TLS handshake/certificate check failed.\n"); return 1; }
+        if (st < 0) { kprintf("Request failed (%d): %s\n", st, http_strerror(st)); return 1; }
         if (st > 0) { kprintf("HTTP %d\n", st); }
         pager_show(r.body, r.len);
         kfree(r.body);
