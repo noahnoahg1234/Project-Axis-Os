@@ -249,6 +249,16 @@ vm.key("f5"); time.sleep(0.4); vm.key("ret"); time.sleep(0.5)       # save song.
 vm.key("esc"); time.sleep(0.3); vm.type("\r")
 out = vm.run("ls", "$")
 check("music tracker saves a .trk song", "song.trk" in out, out)
+# YouTube API key set through the Settings app
+vm.type("settings\r"); time.sleep(0.9)
+for _ in range(12):
+    vm.key("down"); time.sleep(0.05)      # down to 'YouTube API key'
+vm.key("ret"); time.sleep(0.5)
+for ch in "aizatestkey123":
+    vm.key(ch); time.sleep(0.04)
+vm.key("ret"); time.sleep(0.5); vm.key("esc"); time.sleep(0.3); vm.type("\r")
+out = vm.run("google status", "$")
+check("YouTube API key set via Settings", "key stored" in out, out)
 vm.close()
 
 # ------------------------------------- network, browser, store, shello ----

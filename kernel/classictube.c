@@ -242,7 +242,7 @@ static const vid_t shorts[] = {
 };
 #define NSHORT ((int)(sizeof shorts / sizeof *shorts))
 
-/* ================= real YouTube (via the Google API bridge) ============ */
+/* ================= real YouTube (YouTube Data API over native HTTPS) === */
 #define RT_MAX 20
 static char rt_title[RT_MAX][72], rt_chan[RT_MAX][40], rt_id[RT_MAX][16], rt_views[RT_MAX][16];
 static int rt_dur[RT_MAX], rt_n;
@@ -327,6 +327,18 @@ static bool load_search(const char *q) {
     http_resp_t r;
     status_line("Searching YouTube...");
     int st = gapi_youtube("search", params, &r);
+    if (st != 0) return false;
+    int n = parse_items(r.body, r.len, true);
+    kfree(r.body);
+    return n > 0;
+}
+
+/* real Shorts: short-duration videos, most-viewed first */
+static bool load_shorts(void) {
+    http_resp_t r;
+    status_line("Loading Shorts from YouTube...");
+    int st = gapi_youtube("search",
+        "part=snippet&type=video&videoDuration=short&order=viewCount&maxResults=18&q=%23shorts", &r);
     if (st != 0) return false;
     int n = parse_items(r.body, r.len, true);
     kfree(r.body);
@@ -561,7 +573,7 @@ static void shorts_feed(int start) {
 
 /* real (online) Shorts: vertical thumbnail feed from a "#shorts" search */
 static void real_shorts(void) {
-    if (!load_search("#shorts shorts")) return;
+    if (!load_shorts()) return;
     int idx = 0, sw = 30, sh = 42, ox = (SCREEN_W - sw) / 2, liked = 0;
     thumb_ok = 0;
     for (;;) {
@@ -597,7 +609,9 @@ int classictube_run(void) {
     uint32_t preview_t = 0, last = ticks;
     thumb_ok = 0;
     online = false;
-    if (gapi_configured()) {
+    char ytkey[64];
+    bool have_key = gapi_key("youtube", ytkey, sizeof ytkey);
+    if (net_up() && have_key) {              /* real YouTube over native HTTPS */
         scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_WHITE, C_BLACK));
         scr_puts(28, 11, "Connecting to YouTube...", ATTR(C_LRED, C_BLACK));
         online = load_trending();
@@ -613,6 +627,10 @@ int classictube_run(void) {
         scr_puts(1, 0, "\xDB\xDB ClassicTube", ATTR(C_WHITE, C_LRED));
         scr_puts(16, 0, online ? "* LIVE YouTube" : "* offline demo", ATTR(C_YELLOW, C_LRED));
         scr_puts(SCREEN_W - 26, 0, "[ / search ] [ S Shorts ]", ATTR(C_WHITE, C_LRED));
+        if (!online)
+            scr_puts(2, 23, have_key ? "No connection - showing the offline demo."
+                                     : "For real YouTube: set your API key in Settings > YouTube API key.",
+                     ATTR(C_LCYAN, C_BLACK));
 
         for (int r = 0; r < 15 && top + r < count; r++) {
             int i = top + r, y = 2 + r;

@@ -123,12 +123,15 @@ its own secure HTTPS** (TLS 1.2, with certificate checking) - no PC helper neede
 
 1. Get a free API key: open https://console.cloud.google.com/apis/credentials,
    create an **API key**, and enable **YouTube Data API v3**.
-2. In AxisOS:
+2. Set the key in AxisOS, either in **Settings > YouTube API key** (Enter to
+   paste it) or from the shell:
    ```
    google key youtube <YOUR_API_KEY>
-   classictube
    ```
-   (`google status` confirms "Secure HTTPS: available".)
+3. Open `classictube`. With the key set and a network connection it goes
+   **LIVE** - real trending videos, search, and a real **Shorts** feed
+   (short-duration videos), with thumbnails decoded natively from the real
+   JPEGs. (`google status` confirms "YouTube: key stored".)
 
 ClassicTube now shows real trending videos and search results (titles, channels,
 view counts and thumbnails as colour text). It can't play the video itself - a

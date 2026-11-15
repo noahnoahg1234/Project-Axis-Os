@@ -105,12 +105,12 @@ void pager_show(const char *t, size_t len) {
 /* ---- settings ----------------------------------------------------------- */
 enum {
     S_DEFOS, S_TIMEOUT, S_THEME, S_AUTOCORRECT, S_ADVANCED, S_CONFIRM, S_AUTOSAVE, S_HIDDEN,
-    S_CLOCK, S_TZ, S_HOST, S_USER, S_SYSNOW, S_SAVE, S_RESETFS, S_CANCEL, S_COUNT
+    S_CLOCK, S_TZ, S_HOST, S_USER, S_YTKEY, S_SYSNOW, S_SAVE, S_RESETFS, S_CANCEL, S_COUNT
 };
 static const char *labels[S_COUNT] = {
     "Default system at boot", "Boot menu timeout", "Colour theme", "Autocorrect", "Advanced mode at boot",
     "Ask before deleting", "Save files to disk automatically", "Show hidden files", "Clock format", "Time zone",
-    "Computer name", "User name", "Current system (this session)", "> Save and exit", "> Reset files to factory defaults",
+    "Computer name", "User name", "YouTube API key", "Current system (this session)", "> Save and exit", "> Reset files to factory defaults",
     "> Exit without saving"};
 static const char *helps[S_COUNT] = {
     "The system AxisBoot selects by default. You can still pick another one in the boot menu.",
@@ -125,6 +125,7 @@ static const char *helps[S_COUNT] = {
     "Offset from UTC applied to date, time and file times.",
     "Name of this computer (hostname). Enter to edit.",
     "Your user name. Home folders /home/<name> and C:\\Users\\<name> are created as needed.",
+    "Google API key for real YouTube in ClassicTube. Get one at console.cloud.google.com (enable YouTube Data API v3). Enter to set; saved immediately.",
     "Switch between Axis/Linux, Axis/Windows and Axis/FreeBSD without rebooting.",
     "Store these settings in the settings sector so AxisBoot and AxisOS use them next time.",
     "Erase all files and recreate the default folders. This cannot be undone.",
@@ -152,6 +153,7 @@ static void value_str(int i, const config_t *c, int os, char *out, size_t n) {
         break;
     case S_HOST: strlcpy(out, c->hostname, n); break;
     case S_USER: strlcpy(out, c->username, n); break;
+    case S_YTKEY: { char k[64]; strlcpy(out, gapi_key("youtube", k, sizeof k) ? "set" : "not set", n); break; }
     case S_SYSNOW: strlcpy(out, os_name(os), n); break;
     default: out[0] = 0;
     }
@@ -196,10 +198,10 @@ static void settings_draw(const config_t *c, int os, int sel, const char *msg) {
     scr_fill(0, 0, SCREEN_W, 1, ' ', theme.bar);
     scr_puts(2, 0, adv_mode ? "AxisOS Settings  [advanced]" : "AxisOS Settings", theme.bar);
     scr_puts(SCREEN_W - 2 - (int)strlen(os_name(os)), 0, os_name(os), theme.bar);
-    const char *heads[] = {"Boot", "Appearance & behaviour", "Identity", "Actions"};
-    int heady[] = {2, 5, 14, 18};
+    const char *heads[] = {"Boot", "Appearance & behaviour", "Identity & accounts", "Actions"};
+    int heady[] = {2, 5, 14, 19};
     for (int h = 0; h < 4; h++) scr_puts(2, heady[h], heads[h], theme.accent);
-    int rowmap[S_COUNT] = {3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21};
+    int rowmap[S_COUNT] = {3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 20, 21, 22};
     for (int i = 0; i < S_COUNT; i++) {
         int y = rowmap[i];
         uint8_t a = i == sel ? theme.select : theme.normal;
@@ -208,12 +210,12 @@ static void settings_draw(const config_t *c, int os, int sel, const char *msg) {
         char v[48];
         value_str(i, c, os, v, sizeof v);
         if (v[0]) {
-            bool cyc = i != S_HOST && i != S_USER;
+            bool cyc = i != S_HOST && i != S_USER && i != S_YTKEY;
             scr_printf(42, y, a, cyc ? "< %s >" : "[%s]", v);
         }
     }
-    scr_fill(0, 22, SCREEN_W, 1, ' ', theme.normal);
-    scr_putsn(2, 22, msg && *msg ? msg : helps[sel], 76, msg && *msg ? theme.accent : theme.dim);
+    scr_fill(0, 23, SCREEN_W, 1, ' ', theme.normal);
+    scr_putsn(2, 23, msg && *msg ? msg : helps[sel], 76, msg && *msg ? theme.accent : theme.dim);
     scr_fill(0, 24, SCREEN_W, 1, ' ', theme.bar);
     if (!adv_mode) scr_puts(1, 24, "Up/Down: choose   Left/Right: change   Enter: edit / select   S: save   Esc: exit", theme.bar);
     else scr_printf(1, 24, theme.bar, "cfg@LBA%d fs@LBA%d..%d  disk:%s", CONFIG_LBA, FS_LBA, FS_LBA + FS_SECTORS - 1, storage_ready() ? "axis" : "none");
@@ -252,6 +254,14 @@ int settings_run(void) {
             if (tui_prompt(labels[sel], "Type a new name and press Enter (Esc cancels):", buf, sizeof buf) && buf[0]) {
                 if (!fs_valid_name(buf) || strchr(buf, ' ')) snprintf(msg, sizeof msg, "'%s' is not a valid name (no spaces or / \\ : * ? \" < > |)", buf);
                 else strlcpy(sel == S_HOST ? c.hostname : c.username, buf, 32);
+            }
+            con_show_cursor(false);
+        } else if (sel == S_YTKEY) {
+            char buf[64] = "";
+            { char cur[64]; if (gapi_key("youtube", cur, sizeof cur)) strlcpy(buf, cur, sizeof buf); }
+            if (tui_prompt("YouTube API key", "Paste your Google API key (Enter saves, Esc cancels):", buf, sizeof buf)) {
+                gapi_set_key("youtube", buf);
+                strlcpy(msg, buf[0] ? "YouTube API key saved - open ClassicTube for real videos." : "YouTube API key cleared.", sizeof msg);
             }
             con_show_cursor(false);
         } else if (sel == S_SAVE) {

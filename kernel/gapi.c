@@ -236,7 +236,7 @@ int google_cmd(int argc, char **argv) {
         kprintf("  google status                 show current configuration\n");
         kprintf("  google bridge <host[:port]>   (optional) legacy PC bridge fallback\n\n");
         kprintf("Setup: get a key at console.cloud.google.com (enable YouTube\n");
-        kprintf("Data API v3), then:\n");
+        kprintf("Data API v3), then set it here or in Settings > YouTube API key:\n");
         kprintf("  google key youtube AIza...\n  classictube\n");
         return 0;
     }
