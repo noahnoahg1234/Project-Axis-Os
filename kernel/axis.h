@@ -198,6 +198,7 @@ void opl_note_off(int ch);
 void opl_silence(void);
 
 int radio_run(void);
+int tracker_run(void);
 
 /* img.c - shared image facility (decode, quantise, view) */
 uint8_t img_vga_nearest(int r, int g, int b);

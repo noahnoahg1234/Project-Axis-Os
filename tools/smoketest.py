@@ -240,6 +240,15 @@ check("MJPEG video plays and returns", "viewmjpeg" in out, out)
 vm.type("radio\r"); time.sleep(1.4); vm.key("right"); time.sleep(0.4); vm.key("q"); time.sleep(0.3); vm.type("\r")
 out = vm.run("echo radiodone", "$")
 check("FM radio (OPL2) opens and returns", "radiodone" in out, out)
+# music tracker: enter notes, play, save a song, quit
+vm.type("tracker\r"); time.sleep(1.0)
+for n in ("z", "x", "c", "v"):
+    vm.key(n); time.sleep(0.12)
+vm.key("spc"); time.sleep(0.6); vm.key("spc"); time.sleep(0.2)      # play then stop
+vm.key("f5"); time.sleep(0.4); vm.key("ret"); time.sleep(0.5)       # save song.trk
+vm.key("esc"); time.sleep(0.3); vm.type("\r")
+out = vm.run("ls", "$")
+check("music tracker saves a .trk song", "song.trk" in out, out)
 vm.close()
 
 # ------------------------------------- network, browser, store, shello ----

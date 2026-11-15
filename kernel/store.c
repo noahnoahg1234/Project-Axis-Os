@@ -117,6 +117,7 @@ static const app_t builtin[] = {
     {"player", "Media Player", "Tools", "Play music through the PC speaker, with a visualizer and playlist.", mediaplayer_run, NULL, "", "AxisOS repository"},
     {"classictube", "ClassicTube", "Tools", "A YouTube-style video app - videos and Shorts rendered as colour text.", classictube_run, NULL, "", "AxisOS repository"},
     {"radio", "Radio", "Tools", "Retro FM tuner playing chiptune stations through the OPL2 FM synth.", radio_run, NULL, "", "AxisOS repository"},
+    {"tracker", "Music Tracker", "Tools", "Compose FM music: pattern grid, instruments, patterns, order list, save/load.", tracker_run, NULL, "", "AxisOS repository"},
     {"tetris", "Tetris", "Games", "Stack the falling blocks and clear full lines.", app_tetris, NULL, "", "AxisOS repository"},
     {"2048", "2048", "Games", "Slide and join numbered tiles to reach 2048.", app_2048, NULL, "", "AxisOS repository"},
     {"tictactoe", "Tic-Tac-Toe", "Games", "Noughts and crosses against the computer.", app_tictactoe, NULL, "", "AxisOS repository"},

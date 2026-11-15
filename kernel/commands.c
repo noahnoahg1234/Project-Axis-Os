@@ -1886,6 +1886,7 @@ static int c_view(int argc, char **argv) {
     return 0;
 }
 static int c_radio(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return radio_run(); }
+static int c_tracker(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return tracker_run(); }
 static int c_beep(int argc, char **argv) {
     int hz = argc > 1 ? atoi(argv[1]) : 880;
     int ms = argc > 2 ? atoi(argv[2]) : 200;
@@ -2049,6 +2050,7 @@ const command_t commands[] = {
     {"view",      "view",      "view",      "img|image|imgview|show|display|picture", c_view, "view <file.jpg|.gif|url>", "View an image as colour text", 0},
     {"play",      "play",      "play",      "wav|aplay|sound|audio",       c_play,       "play <file.wav|url>",       "Play a WAV sound (Sound Blaster)", 0},
     {"radio",     "radio",     "radio",     "fm|tuner|fmradio|stations",   c_radio,      "radio",                     "FM radio (OPL2 chiptune stations)", 0},
+    {"tracker",   "tracker",   "tracker",   "music|compose|daw|mod|trk",   c_tracker,    "tracker",                   "FM music tracker and editor", 0},
     {"beep",      "beep",      "beep",      "bell|tone",                   c_beep,       "beep [hz] [ms]",            "Beep the PC speaker", 0},
     {"google",    "google",    "google",    "gapi|gcloud|service",        c_google,     "google key|get|yt|status", "Use Google APIs over secure HTTPS", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},

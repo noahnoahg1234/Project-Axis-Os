@@ -45,6 +45,7 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **Images & video** | A real **JPEG decoder** (`kernel/jpeg.c`, baseline, fixed-point, no FPU) and **GIF**/**MJPEG** decoders, usable anywhere. `view <file.jpg\|.gif\|.mjpeg\|url>` opens an image or plays a video as colour text; the **file explorer** opens images the same way (Enter on a `.jpg`/`.gif`/`.mjpeg`). Samples at `/usr/share/pictures/` and `/usr/share/classictube/`. |
 | **Sound (for old PCs)** | Real audio on vintage hardware: the **PC speaker** (every PC) for tones - `beep [hz] [ms]` - a **Sound Blaster 16 / Pro / SB** driver (`kernel/sound.c`) for 8-bit PCM via classic ISA DMA (`play <file.wav\|url>`, 8/16-bit mono/stereo, auto-converted; sample at `/usr/share/sounds/chime.wav`), and an **OPL2 / AdLib FM synth** (`kernel/opl2.c`, the Yamaha YM3812 at port 0x388) for synthesised music. All detected automatically, with graceful fallback. |
 | **Radio** | `radio` (also `fm` / `tuner`): a retro **FM tuner** that plays chiptune "stations" through the OPL2 FM synth - tune across the dial with Left/Right, jump to presets with number keys, change volume, watch the signal meter. Six built-in stations (Synthwave, Chiptune, Classical, Jazz, 8-bit, Electro). Falls back to the PC speaker if there's no FM chip. |
+| **Music Tracker** | `tracker` (also `music` / `compose`): a classic **pattern tracker & editor** (`kernel/tracker.c`) for writing FM music - a grid of 64 rows x 4 channels, notes typed on a piano-style keyboard (`Z S X D C...` / `Q 2 W 3 E...`), OPL2 instruments, 8 patterns with an order list, octave/tempo controls, play a pattern (Space) or the whole song (Enter), and **save/load** songs as `.trk` files. PC-speaker fallback. |
 | **JavaScript (MiniJS)** | A tiny JS interpreter in the browser: variables, `+ - * / %`, comparisons, `&& || !`, `?:`, `if`/`while`/`for`, functions with recursion, and `document.write`, `console.log`, `alert`, `parseInt`, `Math.*`. Classic inline scripts run and inject page content. Integer math only - it is not a full engine, so modern web apps won't run. Also a `js` shell command. |
 | **7-Zip (AxisZip)** | `7z` / `zip` / `unzip`: create and open real `.zip` files, with a built-in DEFLATE decoder so it extracts compressed zips (not just stored ones). `7z a out.zip files`, `7z x file.zip`, `7z l file.zip`. |
 | **Media Player** | `player` (also `media` / `music`): plays music through the **PC speaker** - built-in public-domain tunes plus your own `.sng` files in `/Music` - with a playlist and an animated bar visualizer. |
@@ -190,6 +191,7 @@ kernel/img.c        shared image facility + the 'view' viewer/player
 kernel/sound.c      PC speaker + Sound Blaster 16 PCM audio (for old PCs)
 kernel/opl2.c       OPL2 / AdLib FM synthesiser (Yamaha YM3812)
 kernel/radio.c      Radio app - FM tuner playing OPL2 chiptune stations
+kernel/tracker.c    music tracker & editor (OPL2 FM, .trk songs)
 kernel/gapi.c       Google API client (YouTube Data API over native HTTPS)
 kernel/shello.c     Shello retro shell
 kernel/desktop.c    retro text-mode mouse desktop
