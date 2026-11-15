@@ -259,6 +259,14 @@ for ch in "aizatestkey123":
 vm.key("ret"); time.sleep(0.5); vm.key("esc"); time.sleep(0.3); vm.type("\r")
 out = vm.run("google status", "$")
 check("YouTube API key set via Settings", "key stored" in out, out)
+# clipboard: clip + paste, and Ctrl+V paste into the shell
+vm.run("clip AxisClipOK", "$")
+out = vm.run("paste", "$")
+check("clipboard clip/paste", "AxisClipOK" in out, out)
+vm.run("clip echo CLIPRUN42", "$"); time.sleep(0.2)
+vm.key("ctrl-v"); time.sleep(0.5)      # paste "echo CLIPRUN42" onto the line
+out = vm.run("", "$")                  # Enter submits the pasted command
+check("Ctrl+V pastes into the shell", "CLIPRUN42" in out, out)
 vm.close()
 
 # ------------------------------------- network, browser, store, shello ----

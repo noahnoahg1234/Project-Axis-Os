@@ -200,6 +200,13 @@ void opl_silence(void);
 int radio_run(void);
 int tracker_run(void);
 
+/* clip.c - system clipboard (copy/paste) */
+void clip_set(const char *s, uint32_t n);
+void clip_set_str(const char *s);
+const char *clip_text(void);
+uint32_t clip_len(void);
+bool clip_has(void);
+
 /* img.c - shared image facility (decode, quantise, view) */
 uint8_t img_vga_nearest(int r, int g, int b);
 void img_rgb_to_vga(const uint8_t *rgb, int W, int H, uint8_t *out, int ow, int oh);

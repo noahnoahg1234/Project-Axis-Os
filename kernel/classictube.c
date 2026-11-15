@@ -742,7 +742,7 @@ int classictube_run(void) {
         scr_puts(16, 0, online ? "* LIVE YouTube" : "* offline demo", ATTR(C_YELLOW, C_LRED));
         scr_puts(SCREEN_W - 26, 0, "[ / search ] [ S Shorts ]", ATTR(C_WHITE, C_LRED));
         if (!online)
-            scr_puts(2, 23, have_key ? "No connection - showing the offline demo."
+            scr_puts(2, 23, have_key ? "No connection yet - showing the offline demo. Press R to retry YouTube."
                                      : "For real YouTube: set your API key in Settings > YouTube API key.",
                      ATTR(C_LCYAN, C_BLACK));
 
@@ -778,7 +778,7 @@ int classictube_run(void) {
 
         scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
         scr_puts(1, 24, online ? "Up/Dn browse  Enter watch  V play video  S Shorts  / search  R trending  Q quit"
-                                : "Up/Dn browse  Enter watch  V play video  S Shorts  / search  Q quit",
+                                : "Up/Dn browse  Enter watch  V play video  S Shorts  R retry live  Q quit",
                  ATTR(C_BLACK, C_LGRAY));
 
         int k = online ? kbd_getkey() : kbd_trygetkey();
@@ -798,7 +798,14 @@ int classictube_run(void) {
             }
             con_show_cursor(false);
         }
-        else if ((k == 'r' || k == 'R') && online) { if (load_trending()) sel = top = 0; thumb_ok = 0; }
+        else if (k == 'r' || k == 'R') {
+            if (!online && net_up() && have_key) {   /* retry going live */
+                scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_WHITE, C_BLACK));
+                scr_puts(28, 11, "Reconnecting to YouTube...", ATTR(C_LRED, C_BLACK));
+                online = load_trending();
+            } else if (online && load_trending()) { /* refresh trending */ }
+            sel = top = 0; thumb_ok = 0;
+        }
         else if (k == '/') {
             int tui_prompt(const char *, const char *, char *, size_t);
             if (tui_prompt(online ? "Search YouTube" : "Search", "Find videos:", filter, sizeof filter) && filter[0]) {

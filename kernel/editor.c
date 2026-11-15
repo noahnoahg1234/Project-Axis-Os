@@ -106,8 +106,8 @@ static void draw(void) {
     if (msg[0]) scr_putsn(1, 23, msg, 78, theme.accent);
     msg[0] = 0;
     scr_fill(0, 24, SCREEN_W, 1, ' ', theme.bar);
-    if (adv_mode) scr_puts(1, 24, "^S ^X ^F ^K ^U ^G", theme.bar);
-    else scr_puts(1, 24, "^S Save  ^X/Esc Exit  ^F Find  ^K Cut line  ^U Paste  ^G Go to line  ^A/^E Home/End", theme.bar);
+    if (adv_mode) scr_puts(1, 24, "^S ^X ^F ^C ^K ^U ^G", theme.bar);
+    else scr_puts(1, 24, "^S Save  ^X Exit  ^F Find  ^C Copy  ^K Cut  ^U/^V Paste  ^G Go to  line", theme.bar);
     con_set_cursor(cc - left_col, ED_TOP + cl - top_line);
 }
 
@@ -199,17 +199,23 @@ int editor_run(const char *path) {
         else if (k == KEY_CTRL('g')) {
             char b[12] = "";
             if (tui_prompt("Go to line", "Line number:", b, sizeof b) && b[0]) cur = pos_of_line(atoi(b) > 0 ? atoi(b) - 1 : 0);
-        } else if (k == KEY_CTRL('k')) {
+        } else if (k == KEY_CTRL('k')) {               /* cut line -> clipboard */
             uint32_t s = line_start(cur), e = line_end(cur);
             if (e < len) e++;
             kfree(cutbuf);
             cutlen = e - s;
             cutbuf = kmalloc(cutlen + 1);
             if (cutbuf) memcpy(cutbuf, text + s, cutlen);
+            clip_set(text + s, e - s);
             erase(s, e - s);
             cur = s;
-        } else if (k == KEY_CTRL('u')) {
-            if (cutbuf && cutlen) insert(cutbuf, cutlen);
+        } else if (k == KEY_CTRL('c')) {               /* copy line -> clipboard */
+            uint32_t s = line_start(cur), e = line_end(cur);
+            if (e < len) e++;
+            clip_set(text + s, e - s);
+            strlcpy(msg, "Line copied to clipboard", sizeof msg);
+        } else if (k == KEY_CTRL('u') || k == KEY_CTRL('v')) {  /* paste clipboard */
+            if (clip_len()) insert(clip_text(), clip_len());
         } else if (k == KEY_LEFT) {
             if (cur) cur--;
         } else if (k == KEY_RIGHT) {

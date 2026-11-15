@@ -391,6 +391,14 @@ int line_edit(char *buf, size_t cap, bool use_hist, bool complete) {
             le_draw(buf, len, pos, oldlen);
         } else if (k == '\t' && complete) {
             le_complete(buf, &len, &pos, cap);
+        } else if (k == KEY_CTRL('v')) {               /* paste clipboard */
+            for (const char *s = clip_text(); *s && len + 1 < (int)cap; s++) {
+                if (*s < 32 || *s >= 127) continue;
+                memmove(buf + pos + 1, buf + pos, len - pos);
+                buf[pos++] = *s; len++;
+            }
+            buf[len] = 0;
+            le_draw(buf, len, pos, oldlen);
         } else if (k >= 32 && k < 127 && len + 1 < (int)cap) {
             memmove(buf + pos + 1, buf + pos, len - pos);
             buf[pos++] = (char)k;

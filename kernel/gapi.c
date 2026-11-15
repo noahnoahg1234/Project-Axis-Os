@@ -46,10 +46,18 @@ void gapi_set_bridge(const char *host) {
     if (f >= 0) { fs_write(f, bridge_host, (uint32_t)strlen(bridge_host)); if (cfg.autosave) fs_save(); }
 }
 
+/* Built-in default YouTube key so ClassicTube works out of the box. NOTE: this
+ * is published in a public repo, so Google may auto-revoke it; set your own in
+ * Settings > YouTube API key to override. */
+#define DEFAULT_YT_KEY "AIzaSyDwFk5h7iwmR-spNfykqvCjaxQl3ggvjWE"
+
 bool gapi_key(const char *service, char *out, size_t n) {
     out[0] = 0;
     int f = fs_resolve("/etc/google-keys.txt", FS_ROOT);
-    if (f < 0 || !fs_nodes[f].data) return false;
+    if (f < 0 || !fs_nodes[f].data) {
+        if (!strcasecmp(service, "youtube")) { strlcpy(out, DEFAULT_YT_KEY, n); return out[0] != 0; }
+        return false;
+    }
     const char *t = (const char *)fs_nodes[f].data, *e = t + fs_nodes[f].size;
     size_t sl = strlen(service);
     while (t < e) {
@@ -66,6 +74,7 @@ bool gapi_key(const char *service, char *out, size_t n) {
         }
         t = nl + 1;
     }
+    if (!strcasecmp(service, "youtube")) { strlcpy(out, DEFAULT_YT_KEY, n); return out[0] != 0; }
     return false;
 }
 
@@ -107,11 +116,18 @@ static void urlenc(const char *in, char *out, size_t n) {
 
 /* GET a full https://...googleapis... URL. Native TLS first; bridge as fallback. 0=ok */
 int gapi_fetch(const char *google_url, http_resp_t *r) {
-    /* Preferred path: connect straight to Google over our own TLS stack. */
+    /* Preferred path: connect straight to Google over our own TLS stack.
+     * Retry a couple of times - the first handshake after boot, or a dropped
+     * connection, often succeeds on a second try. */
     if (tls_available() && !strncasecmp(google_url, "https://", 8)) {
-        int st = https_get(google_url, r, NULL);
-        if (st >= 0) return st == 200 ? 0 : st;
-        /* native TLS failed - fall through to the bridge if the user set one */
+        int st = 0;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            st = https_get(google_url, r, NULL);
+            if (st >= 0) return st == 200 ? 0 : st;   /* got a real HTTP reply */
+            if (user_abort()) break;
+            sleep_ms(300);                            /* transient: brief backoff, retry */
+        }
+        /* native TLS failed repeatedly - fall through to the bridge if set */
     }
     if (!gapi_configured()) return -100;
     char enc[1024];

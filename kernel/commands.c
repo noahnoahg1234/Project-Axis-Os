@@ -1885,6 +1885,19 @@ static int c_view(int argc, char **argv) {
     image_view(argv[1]);
     return 0;
 }
+static int c_clip(int argc, char **argv) {
+    if (argc < 2) { kprintf("usage: clip <text...>   (copies text to the clipboard; 'paste' outputs it)\n"); return 1; }
+    char buf[512]; size_t o = 0;
+    for (int i = 1; i < argc && o + 1 < sizeof buf; i++) {
+        if (i > 1 && o + 1 < sizeof buf) buf[o++] = ' ';
+        for (const char *s = argv[i]; *s && o + 1 < sizeof buf; s++) buf[o++] = *s;
+    }
+    buf[o] = 0;
+    clip_set(buf, (uint32_t)o);
+    if (!con_capturing()) kprintf("Copied %u chars to the clipboard. Paste with Ctrl+V (or 'paste').\n", (unsigned)o);
+    return 0;
+}
+static int c_paste(int argc, char **argv) { (void)argc; (void)argv; con_writen(clip_text(), clip_len()); if (!con_capturing()) kprintf("\n"); return 0; }
 static int c_radio(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return radio_run(); }
 static int c_tracker(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return tracker_run(); }
 static int c_beep(int argc, char **argv) {
@@ -2049,6 +2062,8 @@ const command_t commands[] = {
     {"classictube","classictube","classictube","youtube|yt|tube|video|videos", c_classictube, "classictube",              "ClassicTube video app", 0},
     {"view",      "view",      "view",      "img|image|imgview|show|display|picture", c_view, "view <file.jpg|.gif|url>", "View an image as colour text", 0},
     {"play",      "play",      "play",      "wav|aplay|sound|audio",       c_play,       "play <file.wav|url>",       "Play a WAV sound (Sound Blaster)", 0},
+    {"clip",      "clip",      "clip",      "copy|xclip|pbcopy",           c_clip,       "clip <text...>",            "Copy text to the clipboard", 0},
+    {"paste",     "paste",     "paste",     "pbpaste",                     c_paste,      "paste",                     "Print the clipboard contents", 0},
     {"radio",     "radio",     "radio",     "fm|tuner|fmradio|stations",   c_radio,      "radio",                     "FM radio (OPL2 chiptune stations)", 0},
     {"tracker",   "tracker",   "tracker",   "music|compose|daw|mod|trk",   c_tracker,    "tracker",                   "FM music tracker and editor", 0},
     {"beep",      "beep",      "beep",      "bell|tone",                   c_beep,       "beep [hz] [ms]",            "Beep the PC speaker", 0},

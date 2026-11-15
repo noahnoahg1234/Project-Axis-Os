@@ -21,6 +21,10 @@ int tui_input(int x, int y, int w, char *buf, size_t n, uint8_t attr) {
         } else if (k == KEY_CTRL('u')) {
             len = 0;
             buf[0] = 0;
+        } else if (k == KEY_CTRL('v')) {               /* paste clipboard */
+            for (const char *s = clip_text(); *s && len + 1 < n; s++)
+                if (*s >= 32 && *s < 127) buf[len++] = *s;
+            buf[len] = 0;
         } else if (k >= 32 && k < 127 && len + 1 < n) {
             buf[len++] = (char)k;
             buf[len] = 0;
