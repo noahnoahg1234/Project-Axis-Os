@@ -189,6 +189,16 @@ int sound_play_pcm8(const uint8_t *pcm, uint32_t n, int rate);
 int wav_load(const uint8_t *d, uint32_t len, uint8_t **pcm8, uint32_t *nsamp, int *rate);
 int sound_play_wav(const uint8_t *d, uint32_t len);
 
+/* opl2.c - OPL2 / AdLib FM synthesiser */
+void opl_init(void);
+bool opl_available(void);
+void opl_set_instrument(int ch, int idx);
+void opl_note_on(int ch, int freq, int atten);  /* atten 0 loud .. 63 silent */
+void opl_note_off(int ch);
+void opl_silence(void);
+
+int radio_run(void);
+
 /* img.c - shared image facility (decode, quantise, view) */
 uint8_t img_vga_nearest(int r, int g, int b);
 void img_rgb_to_vga(const uint8_t *rgb, int W, int H, uint8_t *out, int ow, int oh);

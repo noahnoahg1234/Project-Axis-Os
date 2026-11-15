@@ -236,6 +236,10 @@ check("JPEG image viewer opens and returns", "viewjpg" in out, out)
 vm.type("view /usr/share/classictube/sample.mjpeg\r"); time.sleep(2.0); vm.key("q"); time.sleep(0.3); vm.type("\r")
 out = vm.run("echo viewmjpeg", "$")
 check("MJPEG video plays and returns", "viewmjpeg" in out, out)
+# FM radio (OPL2 synth)
+vm.type("radio\r"); time.sleep(1.4); vm.key("right"); time.sleep(0.4); vm.key("q"); time.sleep(0.3); vm.type("\r")
+out = vm.run("echo radiodone", "$")
+check("FM radio (OPL2) opens and returns", "radiodone" in out, out)
 vm.close()
 
 # ------------------------------------- network, browser, store, shello ----

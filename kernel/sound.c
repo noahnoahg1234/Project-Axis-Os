@@ -49,6 +49,7 @@ static int sb_reset(void) {
 }
 
 void sound_init(void) {
+    opl_init();                                    /* OPL2 FM synth (AdLib) */
     sb_present = sb_reset();
     if (sb_present) {
         uint8_t *raw = kmalloc(0x20000);           /* 128KB: enough slack to 64KB-align */

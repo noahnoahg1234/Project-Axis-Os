@@ -50,6 +50,7 @@ static const icon_t icons[] = {
     {"Snake", "~@~", app_snake, C_LGREEN},
     {"BlockWorld", "[#]", blockworld_run, C_LGREEN},
     {"ClassicTube", "|>|", classictube_run, C_LRED},
+    {"Radio", "((*))", radio_run, C_YELLOW},
     {"Clock", "(:)", app_clock, C_LCYAN},
     {"Monitor", "[#]", app_monitor, C_LGREEN},
     {"Network", "<~>", act_netconf, C_LBLUE},
