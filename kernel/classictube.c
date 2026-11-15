@@ -743,7 +743,9 @@ int classictube_run(void) {
         scr_puts(SCREEN_W - 26, 0, "[ / search ] [ S Shorts ]", ATTR(C_WHITE, C_LRED));
         if (!online)
             scr_puts(2, 23, have_key ? "No connection yet - showing the offline demo. Press R to retry YouTube."
-                                     : "For real YouTube: set your API key in Settings > YouTube API key.",
+                                     : gapi_default_disabled()
+                                       ? "The free shared key is used up - add your own in Settings > YouTube API key."
+                                       : "For real YouTube: set your API key in Settings > YouTube API key.",
                      ATTR(C_LCYAN, C_BLACK));
 
         for (int r = 0; r < 15 && top + r < count; r++) {

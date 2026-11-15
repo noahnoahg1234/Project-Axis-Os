@@ -53,11 +53,44 @@ void gapi_set_bridge(const char *host) {
 extern const char *calc_preset(void);
 static const char *default_yt_key(void) { return calc_preset(); }
 
+/* The shared default key only has so much daily quota, so once "enough people"
+ * have used it the API starts refusing it. We detect that from the API's own
+ * response and permanently stop using the default key (a marker file persists
+ * the decision), falling back so the user adds their own key. A user-set key is
+ * never auto-disabled. */
+static int default_burned = -1;                 /* -1 = not yet checked */
+static bool g_using_default = false;            /* did the last gapi_key() hand out the default? */
+
+static bool default_is_burned(void) {
+    if (default_burned == 1) return true;                     /* once burned, stays burned */
+    default_burned = (fs_resolve("/etc/yt-default-off", FS_ROOT) >= 0) ? 1 : 0;
+    return default_burned == 1;
+}
+static void burn_default(void) {
+    if (default_is_burned()) return;
+    int id = fs_mkfile("/etc/yt-default-off", FS_ROOT);
+    if (id >= 0) { fs_write(id, "shared key exhausted - set your own in Settings\n", 47); fs_save(); }
+    default_burned = 1;
+}
+bool gapi_default_disabled(void) { return default_is_burned(); }
+
+/* does this API response mean the key itself is exhausted/invalid? */
+static bool yt_key_broken(const char *body, int status) {
+    if (status == 403 || status == 429) return true;
+    if (!body) return false;
+    return strstr(body, "quotaExceeded") || strstr(body, "rateLimitExceeded") ||
+           strstr(body, "dailyLimitExceeded") || strstr(body, "keyInvalid") ||
+           strstr(body, "API key not valid") || strstr(body, "keyExpired");
+}
+
 bool gapi_key(const char *service, char *out, size_t n) {
     out[0] = 0;
+    g_using_default = false;
     int f = fs_resolve("/etc/google-keys.txt", FS_ROOT);
     if (f < 0 || !fs_nodes[f].data) {
-        if (!strcasecmp(service, "youtube")) { strlcpy(out, default_yt_key(), n); return out[0] != 0; }
+        if (!strcasecmp(service, "youtube") && !default_is_burned()) {
+            strlcpy(out, default_yt_key(), n); g_using_default = true; return out[0] != 0;
+        }
         return false;
     }
     const char *t = (const char *)fs_nodes[f].data, *e = t + fs_nodes[f].size;
@@ -76,7 +109,9 @@ bool gapi_key(const char *service, char *out, size_t n) {
         }
         t = nl + 1;
     }
-    if (!strcasecmp(service, "youtube")) { strlcpy(out, default_yt_key(), n); return out[0] != 0; }
+    if (!strcasecmp(service, "youtube") && !default_is_burned()) {
+        strlcpy(out, default_yt_key(), n); g_using_default = true; return out[0] != 0;
+    }
     return false;
 }
 
@@ -147,9 +182,16 @@ int gapi_fetch(const char *google_url, http_resp_t *r) {
 int gapi_youtube(const char *method, const char *params, http_resp_t *r) {
     char key[64];
     if (!gapi_key("youtube", key, sizeof key)) return -101;
+    bool used_default = g_using_default;
     char url[900];
     snprintf(url, sizeof url, "https://youtube.googleapis.com/youtube/v3/%s?%s&key=%s", method, params, key);
-    return gapi_fetch(url, r);
+    int st = gapi_fetch(url, r);
+    /* detector: if the shared default key came back exhausted/invalid, retire it */
+    if (used_default && st >= 0) {
+        int http = st == 0 ? 200 : st;
+        if (yt_key_broken(r->body, http)) burn_default();
+    }
+    return st;
 }
 
 /* Fetch a video's storyboard spec from Google's InnerTube player endpoint.

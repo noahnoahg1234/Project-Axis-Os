@@ -444,6 +444,7 @@ int gapi_fetch(const char *google_url, http_resp_t *r);
 int gapi_youtube(const char *method, const char *params, http_resp_t *r);
 int gapi_thumb(const char *video_id, int w, int h, uint8_t *out);
 int gapi_storyboard(const char *video_id, char *spec, size_t n);  /* InnerTube storyboard spec */
+bool gapi_default_disabled(void);  /* true once the shared default key is retired */
 const char *json_find(const char *json, const char *key);
 const char *json_str(const char *p, char *out, size_t n);
 bool json_field(const char **p, const char *end, const char *key, char *out, size_t n);

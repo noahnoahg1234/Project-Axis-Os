@@ -125,8 +125,11 @@ its own secure HTTPS** (TLS 1.2, with certificate checking) - no PC helper neede
 1. Get a free API key: open https://console.cloud.google.com/apis/credentials,
    create an **API key**, and enable **YouTube Data API v3**.
    AxisOS ships with a built-in default key so ClassicTube works out of the
-   box, but a published default key may be rate-limited or revoked at any time,
-   so for anything real set your own:
+   box, but a shared default key has limited daily quota. AxisOS watches the
+   API's responses and, once the shared key comes back exhausted or invalid
+   (HTTP 403/429, `quotaExceeded`, `keyInvalid`...), it **automatically retires
+   the default key** and asks you to add your own. A key you set yourself is
+   never auto-disabled. So for anything real, set your own:
 2. Set the key in AxisOS, either in **Settings > YouTube API key** (Enter, then
    `Ctrl+V` to paste from the clipboard) or from the shell:
    ```
