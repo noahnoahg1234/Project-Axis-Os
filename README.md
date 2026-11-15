@@ -41,7 +41,7 @@ Install QEMU first from https://www.qemu.org/download/. On Windows, use the full
 | **App Store** | `store` / `winget` / `apt` / `pkg`: install and remove apps. Built in: Calculator, Minesweeper, Paint, Task Monitor (Windows-style), Snake, Big Clock, Fortune (Linux-style), BlockWorld, Tetris, 2048, Tic-Tac-Toe, Pong, Hangman, Guess the Number (Games), Todo List, Unit Converter (Tools). Online repositories (press A) add more apps over http, including real **Linux, Windows-style and FreeBSD** programs (shown under the Programs category). Installed apps run by typing their name; `apps` lists them. |
 | **Shello** | `shello`: a retro, minimal shell with a phosphor-green look and short commands (`LIST`, `GO`, `SHOW`, `NEW`, `DEL`, `MAKE`, `TIME`, `MEM`, `BEEP`, `TINT`, `RUN`). `BYE` returns to the main shell. |
 | **BlockWorld** | A built-in Minecraft-style block sandbox (`blockworld`, also `mine` / `craft`, or install it from the App Store). Explore biomes (plains, forest, desert, snow, jungle, mountains, oceans), swim in flowing water, mine and place blocks, an inventory and hotbar GUI, crafting, mobs (pigs, cows, sheep, zombies, skeletons, spiders, creepers), health, day/night, **Survival and Creative** modes, a **cheat console** (`/creative`, `/give`, `/tp`, `/time`, `/spawn`, `/fly`, ...), and **saved worlds** in `/Worlds`. Keyboard or mouse. |
-| **ClassicTube** | `classictube` (also `youtube` / `yt`): a YouTube app in colour text. **Press `V` to load and play real video** - built-in **animated GIF** (`kernel/gif.c`) and **MJPEG** (`kernel/jpeg.c`) decoders play actual moving pictures as multi-colour half-block text, with real per-frame timing, pause and restart, from a file on disk or fetched over http/https. Samples ship at `/usr/share/classictube/`. With a Google API key it shows **real YouTube** - trending/search with real titles, channels, view counts and **thumbnails decoded natively from the real JPEGs** (no PC helper) - plus a vertical **Shorts** feed, no login/profiles. (YouTube's own H.264/VP9 stream can't be decoded in a text-mode OS, so a YouTube entry shows its real thumbnail; `V` plays actual GIF/MJPEG video.) A key-free **offline demo** of procedural clips is also included. |
+| **ClassicTube** | `classictube` (also `youtube` / `yt`): a YouTube app in colour text. **Press `V` to load and play real video** - built-in **animated GIF** (`kernel/gif.c`) and **MJPEG** (`kernel/jpeg.c`) decoders play actual moving pictures as multi-colour half-block text, with real per-frame timing, pause and restart, from a file on disk or fetched over http/https. Samples ship at `/usr/share/classictube/`. With a Google API key it shows **real YouTube** - trending/search with real titles, channels, view counts and **thumbnails decoded natively from the real JPEGs** (no PC helper) - plus a vertical **Shorts** feed, no login/profiles. Press **Enter** to watch the **actual video frames** via YouTube **storyboards** (JPEG mosaics fetched from Google and played as a colour-text timelapse); the encoded H.264/VP9 stream still can't be decoded in text mode, so this is the real frames at low frame-rate, and `V` also plays any GIF/MJPEG. A key-free **offline demo** of procedural clips is also included. |
 | **Images & video** | A real **JPEG decoder** (`kernel/jpeg.c`, baseline, fixed-point, no FPU) and **GIF**/**MJPEG** decoders, usable anywhere. `view <file.jpg\|.gif\|.mjpeg\|url>` opens an image or plays a video as colour text; the **file explorer** opens images the same way (Enter on a `.jpg`/`.gif`/`.mjpeg`). Samples at `/usr/share/pictures/` and `/usr/share/classictube/`. |
 | **Sound (for old PCs)** | Real audio on vintage hardware: the **PC speaker** (every PC) for tones - `beep [hz] [ms]` - a **Sound Blaster 16 / Pro / SB** driver (`kernel/sound.c`) for 8-bit PCM via classic ISA DMA (`play <file.wav\|url>`, 8/16-bit mono/stereo, auto-converted; sample at `/usr/share/sounds/chime.wav`), and an **OPL2 / AdLib FM synth** (`kernel/opl2.c`, the Yamaha YM3812 at port 0x388) for synthesised music. All detected automatically, with graceful fallback. |
 | **Radio** | `radio` (also `fm` / `tuner`): a retro **FM tuner** that plays chiptune "stations" through the OPL2 FM synth - tune across the dial with Left/Right, jump to presets with number keys, change volume, watch the signal meter. Six built-in stations (Synthwave, Chiptune, Classical, Jazz, 8-bit, Electro). Falls back to the PC speaker if there's no FM chip. |
@@ -132,6 +132,19 @@ its own secure HTTPS** (TLS 1.2, with certificate checking) - no PC helper neede
    **LIVE** - real trending videos, search, and a real **Shorts** feed
    (short-duration videos), with thumbnails decoded natively from the real
    JPEGs. (`google status` confirms "YouTube: key stored".)
+
+### Watching the actual video (storyboards)
+
+Press **Enter** on a video (or a Short) and ClassicTube plays the **real
+video frames** as a fast colour-text timelapse. It does this with YouTube
+**storyboards** - the JPEG mosaic grids YouTube samples across the timeline.
+AxisOS asks Google's InnerTube `player` endpoint for the storyboard spec (an
+HTTPS POST), then fetches the mosaic JPEGs, decodes them, and plays the tiles
+in order. These are the actual frames of the actual video, straight from
+Google - the closest a text-mode OS can get, since the encoded H.264/VP9
+stream cannot be decoded without a GPU/codec. If storyboards are unavailable
+it falls back to the live thumbnail. This is best-effort and depends on
+YouTube's current format and a working connection.
 
 ClassicTube now shows real trending videos and search results (titles, channels,
 view counts and thumbnails as colour text). It can't play the video itself - a

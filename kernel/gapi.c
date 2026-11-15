@@ -134,6 +134,30 @@ int gapi_youtube(const char *method, const char *params, http_resp_t *r) {
     return gapi_fetch(url, r);
 }
 
+/* Fetch a video's storyboard spec from Google's InnerTube player endpoint.
+ * Storyboards are the JPEG mosaic grids YouTube samples across the timeline -
+ * the only form of the actual video frames a text-mode OS can decode. The
+ * spec string tells us the mosaic URLs and geometry. 0 on success. */
+#define YT_INNERTUBE_KEY "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"   /* public WEB client key */
+int gapi_storyboard(const char *video_id, char *spec, size_t n) {
+    spec[0] = 0;
+    if (!tls_available()) return -1;
+    char body[256];
+    snprintf(body, sizeof body,
+        "{\"videoId\":\"%s\",\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20240101.01.00\",\"hl\":\"en\"}}}",
+        video_id);
+    char url[200];
+    snprintf(url, sizeof url, "https://youtubei.googleapis.com/youtubei/v1/player?key=%s&prettyPrint=false", YT_INNERTUBE_KEY);
+    http_resp_t r;
+    int st = https_post(url, "application/json", (const uint8_t *)body, (uint32_t)strlen(body), &r);
+    if (st != 200 || !r.body) { if (st >= 0 && r.body) kfree(r.body); return -1; }
+    int rc = -1;
+    const char *sb = strstr(r.body, "playerStoryboardSpecRenderer");
+    if (sb) { const char *sp = json_find(sb, "spec"); if (sp) { json_str(sp, spec, n); if (spec[0]) rc = 0; } }
+    kfree(r.body);
+    return rc;
+}
+
 /* fetch a thumbnail as w*h colour indices; 0=ok.
  * Native path: download the real JPEG from i.ytimg.com over our own HTTPS and
  * decode it with the built-in JPEG decoder (no PC helper). Falls back to the

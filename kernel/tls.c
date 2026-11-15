@@ -172,8 +172,9 @@ static bool send_client_hello(tls_t *t, const char *host) {
     b[n++] = 0; b[n++] = 0x1D; b[n++] = 0; b[n++] = 0x17;
     /* ec_point_formats: uncompressed */
     b[n++] = 0; b[n++] = 0x0B; b[n++] = 0; b[n++] = 2; b[n++] = 1; b[n++] = 0;
-    /* signature_algorithms */
-    static const uint8_t sa[] = {0x04,0x01, 0x04,0x03, 0x05,0x01, 0x08,0x04, 0x08,0x09, 0x06,0x01};
+    /* signature_algorithms: only the two we can actually verify, so the server
+     * signs the key exchange and its certs with one of them (no RSA-PSS etc.) */
+    static const uint8_t sa[] = {0x04,0x01, /* rsa_pkcs1_sha256 */ 0x04,0x03 /* ecdsa_secp256r1_sha256 */};
     b[n++] = 0; b[n++] = 0x0D; b[n++] = 0; b[n++] = (uint8_t)(sizeof sa + 2); b[n++] = 0; b[n++] = (uint8_t)sizeof sa;
     memcpy(b + n, sa, sizeof sa); n += sizeof sa;
     uint16_t el = (uint16_t)(n - extlen_pos - 2);
@@ -335,8 +336,31 @@ static int tls_recv(tls_t *t, uint8_t *buf, uint32_t max) {
     }
 }
 
-/* ---- public: https GET ------------------------------------------------- */
-int https_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total)) {
+/* decode a chunked transfer-encoding body in place; returns new length */
+static uint32_t dechunk(uint8_t *b, uint32_t len) {
+    uint8_t *out = b; uint32_t i = 0, o = 0;
+    while (i < len) {
+        uint32_t sz = 0; int any = 0;
+        while (i < len) { int c = b[i];
+            if (c >= '0' && c <= '9') sz = sz*16 + (c-'0');
+            else if (c >= 'a' && c <= 'f') sz = sz*16 + (c-'a'+10);
+            else if (c >= 'A' && c <= 'F') sz = sz*16 + (c-'A'+10);
+            else break;
+            any = 1; i++;
+        }
+        while (i + 1 < len && !(b[i] == '\r' && b[i+1] == '\n')) i++;   /* skip chunk ext */
+        i += 2;                                                         /* CRLF */
+        if (!any || sz == 0) break;
+        if (i + sz > len) sz = len - i;
+        memmove(out + o, b + i, sz); o += sz; i += sz + 2;              /* data + CRLF */
+    }
+    return o;
+}
+
+/* general HTTPS request (GET or POST). body may be NULL. */
+int https_request(const char *method, const char *url, const char *ctype,
+                  const uint8_t *body, uint32_t bodylen,
+                  http_resp_t *r, void (*progress)(uint32_t got, uint32_t total)) {
     memset(r, 0, sizeof *r);
     if (!net_up()) return HTTP_ENONET;
     char host[128], path[512];
@@ -355,45 +379,57 @@ int https_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, ui
 
     static tls_t t; /* big - keep off the stack */
     if (!net_resolve(host, &t.ip)) return HTTP_EDNS;
-    if (tls_handshake(&t, host, port) != 0) {
-        klog("tls: %s", t.err);
-        return HTTP_ETLS;
-    }
-    char req[700];
-    snprintf(req, sizeof req, "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: AxisBrowser/1.0 (AxisOS)\r\nAccept: */*\r\nConnection: close\r\n\r\n", path, host);
-    if (tls_send(&t, req, (uint32_t)strlen(req)) != 0) { tcp_close(); return HTTP_ECONN; }
+    if (tls_handshake(&t, host, port) != 0) { klog("tls: %s", t.err); return HTTP_ETLS; }
+
+    char req[800]; int n = 0;
+    n += snprintf(req + n, sizeof req - n,
+                  "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: AxisBrowser/1.0 (AxisOS)\r\nAccept: */*\r\n",
+                  method, path, host);
+    if (body && bodylen)
+        n += snprintf(req + n, sizeof req - n, "Content-Type: %s\r\nContent-Length: %u\r\n",
+                      ctype ? ctype : "application/octet-stream", bodylen);
+    n += snprintf(req + n, sizeof req - n, "Connection: close\r\n\r\n");
+    if (tls_send(&t, req, (uint32_t)n) != 0) { tcp_close(); return HTTP_ECONN; }
+    if (body && bodylen && tls_send(&t, body, bodylen) != 0) { tcp_close(); return HTTP_ECONN; }
 
     uint32_t cap = 16384, len = 0;
     uint8_t *buf = kmalloc(cap);
     if (!buf) { tcp_close(); return HTTP_ECONN; }
     for (;;) {
         if (len + 4096 > cap) { uint32_t nc = cap * 2; uint8_t *nb = krealloc(buf, nc); if (!nb) break; buf = nb; cap = nc; }
-        int n = tls_recv(&t, buf + len, cap - len - 1);
-        if (n <= 0) break;
-        len += n;
+        int got = tls_recv(&t, buf + len, cap - len - 1);
+        if (got <= 0) break;
+        len += got;
         if (progress) progress(len, 0);
         if (user_abort()) break;
     }
     tcp_close();
     buf[len] = 0;
 
-    /* split headers/body like http_get */
     uint8_t *he = NULL;
     for (uint32_t i = 0; i + 3 < len; i++) if (!memcmp(buf + i, "\r\n\r\n", 4)) { he = buf + i; break; }
     if (!he) { kfree(buf); return HTTP_EPROTO; }
     *he = 0;
     const char *sp = strchr((char *)buf, ' ');
     r->status = sp ? atoi(sp + 1) : 0;
-    /* Location / Content-Type */
     char *loc = strcasestr((char *)buf, "\nlocation:");
     if (loc) { loc += 10; while (*loc == ' ') loc++; char *e = strchr(loc, '\r'); uint32_t l = e ? (uint32_t)(e - loc) : 0; if (l >= sizeof r->location) l = sizeof r->location - 1; memcpy(r->location, loc, l); r->location[l] = 0; }
     char *ct = strcasestr((char *)buf, "\ncontent-type:");
     if (ct) { ct += 14; while (*ct == ' ') ct++; char *e = strchr(ct, '\r'); uint32_t l = e ? (uint32_t)(e - ct) : 0; if (l >= sizeof r->ctype) l = sizeof r->ctype - 1; memcpy(r->ctype, ct, l); r->ctype[l] = 0; }
+    int chunked = strcasestr((char *)buf, "\ntransfer-encoding:") && strcasestr((char *)buf, "chunked") != NULL;
     uint8_t *bodyp = he + 4;
     uint32_t blen = len - (uint32_t)(bodyp - buf);
+    if (chunked) blen = dechunk(bodyp, blen);
     r->body = kmalloc(blen + 1);
     if (!r->body) { kfree(buf); return HTTP_ECONN; }
     memcpy(r->body, bodyp, blen); r->body[blen] = 0; r->len = blen;
     kfree(buf);
     return r->status;
+}
+
+int https_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total)) {
+    return https_request("GET", url, NULL, NULL, 0, r, progress);
+}
+int https_post(const char *url, const char *ctype, const uint8_t *body, uint32_t len, http_resp_t *r) {
+    return https_request("POST", url, ctype, body, len, r, NULL);
 }

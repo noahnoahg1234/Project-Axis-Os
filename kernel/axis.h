@@ -423,6 +423,8 @@ bool tcp_is_open(void);
 bool user_abort(void);
 /* tls.c - HTTPS client */
 int https_get(const char *url, http_resp_t *r, void (*progress)(uint32_t got, uint32_t total));
+int https_post(const char *url, const char *ctype, const uint8_t *body, uint32_t len, http_resp_t *r);
+int https_request(const char *method, const char *url, const char *ctype, const uint8_t *body, uint32_t bodylen, http_resp_t *r, void (*progress)(uint32_t, uint32_t));
 bool tls_available(void);
 
 /* gapi.c - Google API client (via a PC bridge) */
@@ -434,6 +436,7 @@ void gapi_set_key(const char *service, const char *key);
 int gapi_fetch(const char *google_url, http_resp_t *r);
 int gapi_youtube(const char *method, const char *params, http_resp_t *r);
 int gapi_thumb(const char *video_id, int w, int h, uint8_t *out);
+int gapi_storyboard(const char *video_id, char *spec, size_t n);  /* InnerTube storyboard spec */
 const char *json_find(const char *json, const char *key);
 const char *json_str(const char *p, char *out, size_t n);
 bool json_field(const char **p, const char *end, const char *key, char *out, size_t n);

@@ -362,8 +362,121 @@ static void thumb_to_pix(int w, int h) {
     for (int i = 0; i < w * h && i < PH * PW; i++) pix[i] = thumb_cache[i];
 }
 
-/* play a real video: thumbnail + info (no decoding; text-mode OS) */
+static void draw_progress(int y, int cur, int total, uint8_t fg);
+
+/* ---- real video frames via YouTube storyboards ------------------------ */
+/* A storyboard is a set of JPEG mosaics: a grid of small frames sampled across
+ * the whole video. We fetch them from Google, decode with the JPEG decoder,
+ * and play the tiles in sequence - the actual video, as a fast timelapse in
+ * colour text. (The H.264/VP9 stream itself can't be decoded in text mode.) */
+
+/* build a storyboard image URL from the base template (substituting $L level
+ * and $M/$N image index) plus the level's sigh token. */
+static void sb_url(char *out, size_t n, const char *base, int level, int img, const char *sigh) {
+    size_t o = 0;
+    for (const char *p = base; *p && o + 1 < n; ) {
+        if (p[0] == '$' && (p[1] == 'L' || p[1] == 'M' || p[1] == 'N')) {
+            int v = p[1] == 'L' ? level : img;
+            char t[12]; int tn = 0; if (v == 0) t[tn++] = '0';
+            while (v > 0) { t[tn++] = '0' + v % 10; v /= 10; }
+            while (tn-- > 0 && o + 1 < n) out[o++] = t[tn];
+            p += 2;
+        } else out[o++] = *p++;
+    }
+    if (sigh && *sigh) { const char *s = "&sigh="; while (*s && o + 1 < n) out[o++] = *s++; while (*sigh && o + 1 < n) out[o++] = *sigh++; }
+    out[o] = 0;
+}
+
+/* returns true if it played a storyboard (even briefly); false = unavailable */
+static bool play_storyboard(const char *video_id, const char *title) {
+    static char spec[1200];
+    status_line("Fetching real video frames from Google...");
+    if (gapi_storyboard(video_id, spec, sizeof spec) != 0) return false;
+
+    /* tokenize spec on '|': [0]=base URL, [1..]=level descriptors */
+    char *tok[16]; int ntok = 0;
+    for (char *p = spec; *p && ntok < 16; ) {
+        tok[ntok++] = p;
+        char *bar = strchr(p, '|');
+        if (!bar) break;
+        *bar = 0; p = bar + 1;
+    }
+    if (ntok < 2) return false;
+    const char *base = tok[0];
+    int level = ntok - 2;                       /* highest available level */
+    char *desc = tok[ntok - 1];
+    /* level descriptor: w#h#count#cols#rows#interval#name#sigh */
+    int f[6] = {0,0,0,0,0,0}; char sigh[64] = "";
+    { char *s = desc; int fi = 0;
+      while (fi < 6) { f[fi++] = atoi(s); char *h = strchr(s, '#'); if (!h) { s = NULL; break; } s = h + 1; }
+      /* sigh is the last '#' field */
+      char *last = strrchr(desc, '#'); if (last) strlcpy(sigh, last + 1, sizeof sigh);
+    }
+    int cols = f[3], rows = f[4], count = f[2];
+    if (cols < 1 || rows < 1 || count < 1) return false;
+    int per = cols * rows, nimg = (count + per - 1) / per;
+
+    scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_BLACK, C_BLACK));
+    int pw = PW, ph = 40;
+    bool paused = false, played = false;
+    uint32_t next = ticks;
+    int frame = 0;
+    for (;;) {                                  /* loop the whole storyboard */
+        for (int m = 0; m < nimg; m++) {
+            char url[700];
+            sb_url(url, sizeof url, base, level, m, sigh);
+            http_resp_t r;
+            int st = http_get(url, &r, NULL);
+            if (st != 200 || !r.body) { if (st >= 0 && r.body) kfree(r.body); if (played) { frame = 0; continue; } return false; }
+            int W, H; uint8_t *rgb;
+            int rc = jpeg_decode((const uint8_t *)r.body, r.len, &W, &H, &rgb);
+            kfree(r.body);
+            if (rc != 0) { if (played) continue; return false; }
+            int tw = W / cols, th = H / rows;
+            for (int t = 0; t < per && frame < count; t++, frame++) {
+                int tx = (t % cols) * tw, ty = (t / cols) * th;
+                while (paused) {
+                    int k = kbd_trygetkey();
+                    if (k == ' ') paused = false;
+                    if (k == 'q' || k == 'Q' || k == KEY_ESC) { kfree(rgb); return true; }
+                    cpu_hlt();
+                }
+                /* sample the tile sub-rectangle into pix */
+                for (int oy = 0; oy < ph; oy++) {
+                    int sy = ty + oy * th / ph;
+                    for (int ox = 0; ox < pw; ox++) {
+                        int sx = tx + ox * tw / pw;
+                        uint8_t *p = rgb + ((uint32_t)sy * W + sx) * 3;
+                        pix[oy * pw + ox] = img_vga_nearest(p[0], p[1], p[2]);
+                    }
+                }
+                blit(4, 1, pw, ph);
+                played = true;
+                scr_fill(0, 0, SCREEN_W, 1, ' ', ATTR(C_WHITE, C_LRED));
+                scr_puts(1, 0, " ClassicTube  REAL VIDEO (storyboard)", ATTR(C_WHITE, C_LRED));
+                scr_fill(0, 22, SCREEN_W, 1, ' ', ATTR(C_LGRAY, C_BLACK));
+                scr_putsn(1, 22, title, SCREEN_W - 2, ATTR(C_WHITE, C_BLACK));
+                draw_progress(23, frame, count, C_LRED);
+                scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
+                scr_puts(1, 24, "Real frames from YouTube  -  Space pause  Q back", ATTR(C_BLACK, C_LGRAY));
+                next = ticks + 8;               /* ~12 fps timelapse */
+                while ((int32_t)(ticks - next) < 0) {
+                    int k = kbd_trygetkey();
+                    if (k == ' ') { paused = true; break; }
+                    if (k == 'q' || k == 'Q' || k == KEY_ESC) { kfree(rgb); return true; }
+                    cpu_hlt();
+                }
+                if (user_abort()) { kfree(rgb); return true; }
+            }
+            kfree(rgb);
+        }
+        frame = 0;                              /* loop */
+    }
+}
+
+/* play a real video: storyboard frames if available, else the thumbnail */
 static void play_real(int idx) {
+    if (play_storyboard(rt_id[idx], rt_title[idx])) return;
     scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_BLACK, C_BLACK));
     int pw = PW, ph = 40;
     bool have = get_thumb(idx, pw, ph);
@@ -590,11 +703,12 @@ static void real_shorts(void) {
         scr_printf(ox, 22, ATTR(C_LCYAN, C_BLACK), "%s", rt_chan[idx]);
         scr_putsn(ox, 23, rt_title[idx], sw, ATTR(C_WHITE, C_BLACK));
         scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
-        scr_printf(1, 24, ATTR(C_BLACK, C_LGRAY), "Short %d/%d  Up/Down next  L like  Q back", idx + 1, rt_n);
+        scr_printf(1, 24, ATTR(C_BLACK, C_LGRAY), "Short %d/%d  Up/Down next  Enter play  L like  Q back", idx + 1, rt_n);
         int k = kbd_getkey();
         if (k == 'q' || k == 'Q' || k == KEY_ESC) break;
         else if (k == KEY_DOWN || k == ' ') { idx = (idx + 1) % rt_n; liked = 0; }
         else if (k == KEY_UP) { idx = (idx + rt_n - 1) % rt_n; liked = 0; }
+        else if (k == '\n') { if (!play_storyboard(rt_id[idx], rt_title[idx])) play_real(idx); thumb_ok = 0; }
         else if (k == 'l' || k == 'L') liked = 1;
     }
 }
