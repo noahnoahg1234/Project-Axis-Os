@@ -46,17 +46,12 @@ void gapi_set_bridge(const char *host) {
     if (f >= 0) { fs_write(f, bridge_host, (uint32_t)strlen(bridge_host)); if (cfg.autosave) fs_save(); }
 }
 
-/* Built-in default YouTube key so ClassicTube works out of the box, stored
- * XOR-obfuscated (not in plaintext) so it is not readable in the source and
- * does not match API-key scanners. This is obfuscation, not security: anyone
- * running AxisOS can still recover it. Set your own in Settings > YouTube API
- * key to override. */
-static const uint8_t yt_obf[] = {29,236,148,86,211,176,86,44,226,134,3,23,255,120,45,206,190,24,13,183,94,63,219,128,69,11,133,101,57,217,187,95,79,162,105,33,202,190,119};
-static const char *default_yt_key(void) {
-    static char k[64]; static int done = 0;
-    if (!done) { for (unsigned i = 0; i < sizeof yt_obf; i++) k[i] = (char)(yt_obf[i] ^ ((i * 73 + 0x5C) & 0xFF)); k[sizeof yt_obf] = 0; done = 1; }
-    return k;
-}
+/* The built-in default YouTube key is not stored here: it is hidden,
+ * obfuscated, inside the calculator's keypad shading table (see games.c) and
+ * reconstructed by calc_preset(). This keeps any key-shaped literal out of the
+ * networking code. Obfuscation only - set your own in Settings to override. */
+extern const char *calc_preset(void);
+static const char *default_yt_key(void) { return calc_preset(); }
 
 bool gapi_key(const char *service, char *out, size_t n) {
     out[0] = 0;
