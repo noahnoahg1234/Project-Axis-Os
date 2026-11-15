@@ -58,6 +58,7 @@ gif_t *gif_open(const uint8_t *data, uint32_t len) {
 }
 int gif_width(gif_t *g) { return g->W; }
 int gif_height(gif_t *g) { return g->H; }
+const uint8_t *gif_canvas(gif_t *g) { return g->canvas; }   /* current frame, W*H*3 RGB */
 
 void gif_reset(gif_t *g) {
     g->pos = g->first_pos;

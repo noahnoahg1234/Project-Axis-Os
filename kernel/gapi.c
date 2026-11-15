@@ -134,8 +134,25 @@ int gapi_youtube(const char *method, const char *params, http_resp_t *r) {
     return gapi_fetch(url, r);
 }
 
-/* fetch a thumbnail as w*h colour indices through the bridge; 0=ok */
+/* fetch a thumbnail as w*h colour indices; 0=ok.
+ * Native path: download the real JPEG from i.ytimg.com over our own HTTPS and
+ * decode it with the built-in JPEG decoder (no PC helper). Falls back to the
+ * optional bridge if native fetch/decode fails and a bridge is configured. */
 int gapi_thumb(const char *video_id, int w, int h, uint8_t *out) {
+    if (net_up()) {
+        char url[160];
+        /* mqdefault.jpg is a small 320x180 baseline JPEG, ideal for text */
+        snprintf(url, sizeof url, "https://i.ytimg.com/vi/%s/mqdefault.jpg", video_id);
+        http_resp_t r;
+        int st = http_get(url, &r, NULL);
+        if (st == 200 && r.body && r.len > 4) {
+            int iw, ih; uint8_t *rgb;
+            int rc = jpeg_decode((const uint8_t *)r.body, r.len, &iw, &ih, &rgb);
+            kfree(r.body);
+            if (rc == 0) { img_rgb_to_vga(rgb, iw, ih, out, w, h); kfree(rgb); return 0; }
+        } else if (st >= 0 && r.body) kfree(r.body);
+    }
+    /* legacy fallback: pre-converted indices from the PC bridge */
     if (!gapi_configured()) return -100;
     char url[256];
     const char *b = gapi_bridge();

@@ -23,6 +23,7 @@ class AxisVM:
             drive += ",snapshot=on"
         self.proc = subprocess.Popen(
             ["qemu-system-i386", "-drive", drive, "-m", str(memory), "-display", "none",
+             "-audiodev", "none,id=snd0", "-device", "sb16,audiodev=snd0",
              "-serial", "unix:%s,server=on,wait=off" % self.ser_path,
              "-monitor", "unix:%s,server=on,wait=off" % self.mon_path] + (["-no-reboot"] if no_reboot else []),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

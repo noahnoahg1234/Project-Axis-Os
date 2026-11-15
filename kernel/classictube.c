@@ -365,7 +365,7 @@ static void play_real(int idx) {
             blit(4, 1, pw, ph);
         } else {
             scr_fill(4, 1, pw, ph / 2, (char)0xB0, ATTR(C_DGRAY, C_BLACK));
-            scr_puts(20, 10, "(thumbnail unavailable - need Pillow on the bridge)", ATTR(C_LGRAY, C_BLACK));
+            scr_puts(24, 10, "(thumbnail unavailable - check the connection)", ATTR(C_LGRAY, C_BLACK));
         }
         scr_fill(0, 0, SCREEN_W, 1, ' ', ATTR(C_WHITE, C_LRED));
         scr_puts(1, 0, " ClassicTube  LIVE", ATTR(C_WHITE, C_LRED));
@@ -464,6 +464,49 @@ static void play_gif(const uint8_t *data, uint32_t len, const char *title) {
     }
     gif_close(g);
 }
+/* MJPEG (and single JPEG): concatenated JPEG frames, decoded to colour text */
+static void play_mjpeg(const uint8_t *data, uint32_t len, const char *title) {
+    if (jpeg_frame_len(data, len) == 0) { gif_error_screen("Not a valid JPEG / MJPEG video."); return; }
+    scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_BLACK, C_BLACK));
+    int pw = PW, ph = 40, fcount = 0, vw = 0, vh = 0, fps = 12;
+    uint32_t pos = 0, next = ticks;
+    bool paused = false;
+    for (;;) {
+        if (!paused && ticks >= next) {
+            uint32_t fl = pos < len ? jpeg_frame_len(data + pos, len - pos) : 0;
+            if (fl == 0) { pos = 0; fcount = 0; fl = jpeg_frame_len(data, len); }  /* loop */
+            if (fl) {
+                int w, h; uint8_t *rgb;
+                if (jpeg_decode(data + pos, fl, &w, &h, &rgb) == 0) {
+                    vw = w; vh = h;
+                    img_rgb_to_vga(rgb, w, h, pix, pw, ph);
+                    blit(4, 1, pw, ph);
+                    kfree(rgb);
+                }
+                pos += fl; fcount++;
+            }
+            next = ticks + (TICK_HZ / fps > 0 ? TICK_HZ / fps : 1);
+        }
+        scr_fill(0, 0, SCREEN_W, 1, ' ', ATTR(C_WHITE, C_LRED));
+        scr_puts(1, 0, " ClassicTube  VIDEO", ATTR(C_WHITE, C_LRED));
+        scr_putsn(21, 0, title, 44, ATTR(C_WHITE, C_LRED));
+        scr_fill(0, 22, SCREEN_W, 1, ' ', ATTR(C_LGRAY, C_BLACK));
+        scr_printf(1, 22, ATTR(C_LCYAN, C_BLACK), "%dx%d MJPEG  -  frame %d", vw, vh, fcount);
+        scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
+        scr_puts(1, 24, paused ? "PAUSED  Space play  R restart  Q back" : "Playing  Space pause  R restart  Q back", ATTR(C_BLACK, C_LGRAY));
+        int k = kbd_trygetkey();
+        if (k == 'q' || k == 'Q' || k == KEY_ESC) break;
+        else if (k == ' ') paused = !paused;
+        else if (k == 'r' || k == 'R') { pos = 0; fcount = 0; next = ticks; }
+        if (k < 0) cpu_hlt();
+    }
+}
+/* pick the player by content signature */
+static void play_media(const uint8_t *data, uint32_t len, const char *title) {
+    if (len >= 4 && !memcmp(data, "GIF8", 4)) play_gif(data, len, title);
+    else if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8) play_mjpeg(data, len, title);
+    else gif_error_screen("Unsupported video format (use GIF or MJPEG).");
+}
 /* load a video from an http(s):// URL or a local file path, then play it */
 static void load_and_play_video(const char *src) {
     if (!strncasecmp(src, "http://", 7) || !strncasecmp(src, "https://", 8)) {
@@ -472,12 +515,12 @@ static void load_and_play_video(const char *src) {
         http_resp_t r;
         int st = http_get(src, &r, NULL);
         if (st < 0 || !r.body) { gif_error_screen("Could not download the video."); return; }
-        play_gif((const uint8_t *)r.body, r.len, src);
+        play_media((const uint8_t *)r.body, r.len, src);
         kfree(r.body);
     } else {
         int id = fs_resolve(src, fs_cwd);
         if (id < 0 || fs_nodes[id].type != FT_FILE || !fs_nodes[id].data) { gif_error_screen("File not found."); return; }
-        play_gif(fs_nodes[id].data, fs_nodes[id].size, src);
+        play_media(fs_nodes[id].data, fs_nodes[id].size, src);
     }
 }
 

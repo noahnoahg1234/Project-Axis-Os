@@ -9,6 +9,9 @@
  */
 #include "axis.h"
 #include "sample_gif.h"   /* ClassicTube demo video, seeded to /usr/share/classictube */
+#include "sample_jpg.h"   /* sample image for the viewer, seeded to /usr/share/pictures */
+#include "sample_mjpeg.h" /* sample MJPEG video, seeded to /usr/share/classictube */
+#include "sample_wav.h"   /* sample sound, seeded to /usr/share/sounds */
 
 fs_node_t fs_nodes[FS_MAX_NODES];
 int fs_cwd = FS_ROOT;
@@ -530,6 +533,9 @@ void fs_format(void) {
     mkf(b, "notes.txt", "My notes\n--------\n", 0);
     mkf("/Music", "twinkle.sng", ";Twinkle (yours)\nC4 C4 G4 G4 A4 A4 G4:4 F4 F4 E4 E4 D4 D4 C4:4\n", 0);
     mkf_bin("/usr/share/classictube", "sample.gif", sample_gif, SAMPLE_GIF_LEN, 0);
+    mkf_bin("/usr/share/pictures", "sample.jpg", sample_jpg, SAMPLE_JPG_LEN, 0);
+    mkf_bin("/usr/share/classictube", "sample.mjpeg", sample_mjpeg, SAMPLE_MJPEG_LEN, 0);
+    mkf_bin("/usr/share/sounds", "chime.wav", sample_wav, SAMPLE_WAV_LEN, 0);
     mkdirp("/Documents");
     mkf("/var/log", "messages", "", 0);
     fs_dirty = true;

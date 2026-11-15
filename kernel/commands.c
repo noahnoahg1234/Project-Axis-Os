@@ -1879,6 +1879,33 @@ static int c_blockworld(int argc, char **argv) { (void)argc; (void)argv; if (con
 static int c_zip(int argc, char **argv) { return zip_cmd(argc, argv); }
 static int c_media(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return mediaplayer_run(); }
 static int c_classictube(int argc, char **argv) { (void)argc; (void)argv; if (con_capturing()) return 1; return classictube_run(); }
+static int c_view(int argc, char **argv) {
+    if (argc < 2) { kprintf("usage: %s <file.jpg|file.gif | http(s)://url>\n", argv[0]); return 1; }
+    if (con_capturing()) { kprintf("(image viewer needs the screen)\n"); return 1; }
+    image_view(argv[1]);
+    return 0;
+}
+static int c_beep(int argc, char **argv) {
+    int hz = argc > 1 ? atoi(argv[1]) : 880;
+    int ms = argc > 2 ? atoi(argv[2]) : 200;
+    snd_beep(hz, ms);
+    return 0;
+}
+static int c_play(int argc, char **argv) {
+    if (argc < 2) {
+        kprintf("usage: play <file.wav | http(s)://url>\n");
+        kprintf("Sound card: %s\n", sound_available() ? "Sound Blaster (PCM audio ready)" : "none (PC speaker only - try 'beep')");
+        return 1;
+    }
+    if (!sound_available()) { kprintf("No PCM sound card detected. The PC speaker works via 'beep'.\n"); return 1; }
+    uint32_t len = 0;
+    uint8_t *data = img_load(argv[1], &len);     /* loads a file path or http(s):// URL */
+    if (!data) { shell_print_error(E_IO, "could not read that file"); return 1; }
+    int rc = sound_play_wav(data, len);
+    kfree(data);
+    if (rc != 0) { kprintf("Not a playable WAV (8/16-bit PCM, mono/stereo).\n"); return 1; }
+    return 0;
+}
 static int c_google(int argc, char **argv) { return google_cmd(argc, argv); }
 static int c_js(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: js <code>   e.g. js document.write(2+2)\n"); return 1; }
@@ -2018,6 +2045,9 @@ const command_t commands[] = {
     {"player",    "player",    "player",    "media|music|mplayer|vlc|wmp", c_media,     "player",                      "Media player (music & art)", 0},
     {"js",        "js",        "js",        "javascript",            c_js,         "js <code>",                   "Run a snippet of JavaScript", 0},
     {"classictube","classictube","classictube","youtube|yt|tube|video|videos", c_classictube, "classictube",              "ClassicTube video app", 0},
+    {"view",      "view",      "view",      "img|image|imgview|show|display|picture", c_view, "view <file.jpg|.gif|url>", "View an image as colour text", 0},
+    {"play",      "play",      "play",      "wav|aplay|sound|audio",       c_play,       "play <file.wav|url>",       "Play a WAV sound (Sound Blaster)", 0},
+    {"beep",      "beep",      "beep",      "bell|tone",                   c_beep,       "beep [hz] [ms]",            "Beep the PC speaker", 0},
     {"google",    "google",    "google",    "gapi|gcloud|service",        c_google,     "google key|get|yt|status", "Use Google APIs over secure HTTPS", 0},
     {"highpower", "highpower", "highpower", "hp|turbo|powermode",         c_highpower,  "highpower [on|off]",          "Larger memory for heavy programs", 0},
     {"osname",    "osname",    "osname",    "reportos|nameconvert",       c_osname,     "osname auto|linux|windows|freebsd", "What OS programs think they're on", 0},

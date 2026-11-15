@@ -170,10 +170,31 @@ typedef struct gif gif_t;
 gif_t *gif_open(const uint8_t *data, uint32_t len);   /* NULL on failure */
 int gif_width(gif_t *g);
 int gif_height(gif_t *g);
+const uint8_t *gif_canvas(gif_t *g);                  /* current frame W*H*3 RGB */
 int gif_next_frame(gif_t *g, int *delay_cs);          /* 1 = frame ready, 0 = end */
 void gif_reset(gif_t *g);                             /* rewind to first frame */
 void gif_sample(gif_t *g, uint8_t *out, int outw, int outh); /* -> VGA colour indices */
 void gif_close(gif_t *g);
+
+/* jpeg.c - baseline JPEG decoder */
+int jpeg_decode(const uint8_t *data, uint32_t len, int *w, int *h, uint8_t **rgb); /* 0 ok; rgb kmalloc'd */
+uint32_t jpeg_frame_len(const uint8_t *data, uint32_t len);  /* bytes of first JPEG (MJPEG) */
+
+/* sound.c - PC speaker + Sound Blaster 16 PCM (for old PCs) */
+void sound_init(void);
+bool sound_available(void);
+void snd_tone(int hz);
+void snd_beep(int hz, int ms);
+int sound_play_pcm8(const uint8_t *pcm, uint32_t n, int rate);
+int wav_load(const uint8_t *d, uint32_t len, uint8_t **pcm8, uint32_t *nsamp, int *rate);
+int sound_play_wav(const uint8_t *d, uint32_t len);
+
+/* img.c - shared image facility (decode, quantise, view) */
+uint8_t img_vga_nearest(int r, int g, int b);
+void img_rgb_to_vga(const uint8_t *rgb, int W, int H, uint8_t *out, int ow, int oh);
+int img_decode_rgb(const uint8_t *data, uint32_t len, int *w, int *h, uint8_t **rgb);
+uint8_t *img_load(const char *src, uint32_t *out_len);       /* file or http(s) URL; kmalloc'd */
+void image_view(const char *src);
 
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */

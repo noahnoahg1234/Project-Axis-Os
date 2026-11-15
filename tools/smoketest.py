@@ -213,6 +213,31 @@ out = vm.run("ls /usr/share/classictube", "$")
 check("ClassicTube sample video is installed", "sample.gif" in out, out)
 vm.close()
 
+# ------------------------------------------------ images, video, sound ----
+vm, ok = boot("1", "$")
+check("boots for media tests", ok)
+out = vm.run("play", "$")
+check("Sound Blaster detected", "Sound Blaster" in out, out)
+out = vm.run("ls /usr/share/sounds", "$")
+check("sample WAV installed", "chime.wav" in out, out)
+vm.run("play /usr/share/sounds/chime.wav", "$")          # must return (DMA completes, no hang)
+out = vm.run("echo afterwav", "$")
+check("play WAV returns to the shell", "afterwav" in out, out)
+out = vm.run("beep 880 60", "$")                         # PC speaker
+out = vm.run("echo afterbeep", "$")
+check("beep returns to the shell", "afterbeep" in out, out)
+out = vm.run("ls /usr/share/pictures", "$")
+check("sample JPEG installed", "sample.jpg" in out, out)
+# JPEG still image through the viewer (decodes in-OS)
+vm.type("view /usr/share/pictures/sample.jpg\r"); time.sleep(1.2); vm.key("q"); time.sleep(0.3); vm.type("\r")
+out = vm.run("echo viewjpg", "$")
+check("JPEG image viewer opens and returns", "viewjpg" in out, out)
+# MJPEG video through the viewer (decodes several JPEG frames)
+vm.type("view /usr/share/classictube/sample.mjpeg\r"); time.sleep(2.0); vm.key("q"); time.sleep(0.3); vm.type("\r")
+out = vm.run("echo viewmjpeg", "$")
+check("MJPEG video plays and returns", "viewmjpeg" in out, out)
+vm.close()
+
 # ------------------------------------- network, browser, store, shello ----
 # serve the sample app repository (store/) on the host; QEMU's user network
 # reaches the host as 10.0.2.2

@@ -101,6 +101,7 @@ void kmain(void) {
     idt_init();
     kbd_init();
     mouse_init();
+    sound_init();
     irq_on();
 
     if (cur_os == OS_WINDOWS) windows_splash();

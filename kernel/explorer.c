@@ -128,8 +128,22 @@ static void draw(void) {
     status[0] = 0;
 }
 
+/* case-insensitive check that name ends with suffix */
+static bool ends_with_ci(const char *name, const char *suf) {
+    size_t ln = strlen(name), ls = strlen(suf);
+    return ln >= ls && !strcasecmp(name + ln - ls, suf);
+}
 static void view_file(int id) {
     fs_node_t *n = &fs_nodes[id];
+    /* images open in the colour-text image viewer */
+    if (ends_with_ci(n->name, ".jpg") || ends_with_ci(n->name, ".jpeg") ||
+        ends_with_ci(n->name, ".gif") || ends_with_ci(n->name, ".mjpeg") || ends_with_ci(n->name, ".mjpg")) {
+        char p[256];
+        fs_path_unix(id, p, sizeof p);
+        image_view(p);
+        con_show_cursor(false);
+        return;
+    }
     int first = 0;
     for (;;) {
         scr_fill(0, 0, SCREEN_W, 1, ' ', theme.bar);
