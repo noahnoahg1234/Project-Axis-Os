@@ -8,6 +8,7 @@
  * AxisOS disk (LBA 2048..) when saving is possible.
  */
 #include "axis.h"
+#include "sample_gif.h"   /* ClassicTube demo video, seeded to /usr/share/classictube */
 
 fs_node_t fs_nodes[FS_MAX_NODES];
 int fs_cwd = FS_ROOT;
@@ -429,6 +430,15 @@ static void mkf(const char *dir, const char *name, const char *text, uint8_t att
     fs_write(f, text, strlen(text));
     fs_nodes[f].attr |= attr;
 }
+/* seed a binary file (e.g. the ClassicTube sample video) */
+static void mkf_bin(const char *dir, const char *name, const void *data, uint32_t len, uint8_t attr) {
+    int d = mkdirp(dir);
+    if (d < 0) return;
+    int f = fs_create(d, name, FT_FILE);
+    if (f < 0) return;
+    fs_write(f, data, len);
+    fs_nodes[f].attr |= attr;
+}
 
 void fs_format(void) {
     for (int i = 0; i < FS_MAX_NODES; i++) {
@@ -519,6 +529,7 @@ void fs_format(void) {
     snprintf(b, sizeof b, "%s/Documents", users);
     mkf(b, "notes.txt", "My notes\n--------\n", 0);
     mkf("/Music", "twinkle.sng", ";Twinkle (yours)\nC4 C4 G4 G4 A4 A4 G4:4 F4 F4 E4 E4 D4 D4 C4:4\n", 0);
+    mkf_bin("/usr/share/classictube", "sample.gif", sample_gif, SAMPLE_GIF_LEN, 0);
     mkdirp("/Documents");
     mkf("/var/log", "messages", "", 0);
     fs_dirty = true;

@@ -423,6 +423,64 @@ static void play_video(const vid_t *v) {
     }
 }
 
+/* ---- real video playback (animated GIF, decoded to colour text) -------- */
+static void gif_error_screen(const char *msg) {
+    scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_LGRAY, C_BLACK));
+    scr_puts(4, 11, msg, ATTR(C_LRED, C_BLACK));
+    status_line("Q back");
+    for (;;) { int k = kbd_getkey(); if (k == 'q' || k == 'Q' || k == KEY_ESC) break; }
+}
+static void play_gif(const uint8_t *data, uint32_t len, const char *title) {
+    gif_t *g = gif_open(data, len);
+    if (!g) { gif_error_screen("Could not decode that video (needs a valid animated GIF)."); return; }
+    scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_BLACK, C_BLACK));
+    int pw = PW, ph = 40;
+    int delay = 10, have = gif_next_frame(g, &delay), fcount = 0;
+    uint32_t next = ticks;
+    bool paused = false;
+    for (;;) {
+        if (!paused && ticks >= next) {
+            if (!have) { gif_reset(g); fcount = 0; have = gif_next_frame(g, &delay); }
+            if (have) {
+                gif_sample(g, pix, pw, ph);
+                blit(4, 1, pw, ph);
+                int dl = delay * TICK_HZ / 100; if (dl < 2) dl = 2;
+                next = ticks + dl; fcount++;
+                have = gif_next_frame(g, &delay);
+            }
+        }
+        scr_fill(0, 0, SCREEN_W, 1, ' ', ATTR(C_WHITE, C_LRED));
+        scr_puts(1, 0, " ClassicTube  VIDEO", ATTR(C_WHITE, C_LRED));
+        scr_putsn(21, 0, title, 44, ATTR(C_WHITE, C_LRED));
+        scr_fill(0, 22, SCREEN_W, 1, ' ', ATTR(C_LGRAY, C_BLACK));
+        scr_printf(1, 22, ATTR(C_LCYAN, C_BLACK), "%dx%d video  -  frame %d", gif_width(g), gif_height(g), fcount);
+        scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
+        scr_puts(1, 24, paused ? "PAUSED  Space play  R restart  Q back" : "Playing  Space pause  R restart  Q back", ATTR(C_BLACK, C_LGRAY));
+        int k = kbd_trygetkey();
+        if (k == 'q' || k == 'Q' || k == KEY_ESC) break;
+        else if (k == ' ') paused = !paused;
+        else if (k == 'r' || k == 'R') { gif_reset(g); fcount = 0; have = gif_next_frame(g, &delay); next = ticks; }
+        if (k < 0) cpu_hlt();
+    }
+    gif_close(g);
+}
+/* load a video from an http(s):// URL or a local file path, then play it */
+static void load_and_play_video(const char *src) {
+    if (!strncasecmp(src, "http://", 7) || !strncasecmp(src, "https://", 8)) {
+        scr_fill(0, 0, SCREEN_W, SCREEN_H, ' ', ATTR(C_BLACK, C_BLACK));
+        status_line("Loading video over the network...");
+        http_resp_t r;
+        int st = http_get(src, &r, NULL);
+        if (st < 0 || !r.body) { gif_error_screen("Could not download the video."); return; }
+        play_gif((const uint8_t *)r.body, r.len, src);
+        kfree(r.body);
+    } else {
+        int id = fs_resolve(src, fs_cwd);
+        if (id < 0 || fs_nodes[id].type != FT_FILE || !fs_nodes[id].data) { gif_error_screen("File not found."); return; }
+        play_gif(fs_nodes[id].data, fs_nodes[id].size, src);
+    }
+}
+
 /* ---- Shorts (vertical feed) ------------------------------------------- */
 static void shorts_feed(int start) {
     int idx = start, frame = 0, likes_bonus = 0;
@@ -544,8 +602,8 @@ int classictube_run(void) {
         }
 
         scr_fill(0, 24, SCREEN_W, 1, ' ', ATTR(C_BLACK, C_LGRAY));
-        scr_puts(1, 24, online ? "Up/Down browse  Enter watch  S Shorts  / search  R trending  Q quit"
-                                : "Up/Down browse  Enter watch  S Shorts  / search  Q quit (set up 'google' for real YouTube)",
+        scr_puts(1, 24, online ? "Up/Dn browse  Enter watch  V play video  S Shorts  / search  R trending  Q quit"
+                                : "Up/Dn browse  Enter watch  V play video  S Shorts  / search  Q quit",
                  ATTR(C_BLACK, C_LGRAY));
 
         int k = online ? kbd_getkey() : kbd_trygetkey();
@@ -554,6 +612,17 @@ int classictube_run(void) {
         else if (k == KEY_DOWN && sel + 1 < count) sel++;
         else if (k == '\n' && count) { if (online) play_real(sel); else play_video(&videos[sel]); thumb_ok = 0; }
         else if (k == 's' || k == 'S') { if (online) real_shorts(); else shorts_feed(0); sel = top = 0; thumb_ok = 0; }
+        else if (k == 'v' || k == 'V') {
+            int tui_prompt(const char *, const char *, char *, size_t);
+            char src[256];
+            strlcpy(src, "/usr/share/classictube/sample.gif", sizeof src);
+            if (tui_prompt("Play video", "GIF file path, or http(s):// URL:", src, sizeof src) && src[0]) {
+                con_show_cursor(false);
+                load_and_play_video(src);
+                thumb_ok = 0;
+            }
+            con_show_cursor(false);
+        }
         else if ((k == 'r' || k == 'R') && online) { if (load_trending()) sel = top = 0; thumb_ok = 0; }
         else if (k == '/') {
             int tui_prompt(const char *, const char *, char *, size_t);

@@ -164,6 +164,17 @@ uint32_t js_output_len(void);
 bool js_get_alert(char *out, size_t n);
 void js_free(void);
 int classictube_run(void);
+
+/* gif.c - animated GIF decoder (real video playback) */
+typedef struct gif gif_t;
+gif_t *gif_open(const uint8_t *data, uint32_t len);   /* NULL on failure */
+int gif_width(gif_t *g);
+int gif_height(gif_t *g);
+int gif_next_frame(gif_t *g, int *delay_cs);          /* 1 = frame ready, 0 = end */
+void gif_reset(gif_t *g);                             /* rewind to first frame */
+void gif_sample(gif_t *g, uint8_t *out, int outw, int outh); /* -> VGA colour indices */
+void gif_close(gif_t *g);
+
 int kbd_getkey(void);  /* blocking */
 int kbd_trygetkey(void); /* -1 if none */
 bool kbd_ctrl_c_pending(void);

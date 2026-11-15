@@ -40,7 +40,6 @@ static int bn_cmp(const bn_t *a,const bn_t *b){
     return 0;
 }
 static int bn_getbit(const bn_t *a,int i){ return (a->w[i/32]>>(i%32))&1; }
-static void bn_shl1(bn_t *a){ uint32_t c=0; for(int i=0;i<BN_W;i++){ uint32_t nc=a->w[i]>>31; a->w[i]=(a->w[i]<<1)|c; c=nc; } }
 /* width-bounded variants (operate only on the low w limbs; the rest stay 0) */
 static int bn_cmp_w(const bn_t *a,const bn_t *b,int w){ for(int i=w-1;i>=0;i--){ if(a->w[i]<b->w[i]) return -1; if(a->w[i]>b->w[i]) return 1; } return 0; }
 static void bn_sub_w(bn_t *r,const bn_t *a,const bn_t *b,int w){ int64_t br=0; for(int i=0;i<w;i++){ int64_t s=(int64_t)a->w[i]-b->w[i]-br; if(s<0){s+=((int64_t)1<<32);br=1;}else br=0; r->w[i]=(uint32_t)s; } }

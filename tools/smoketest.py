@@ -193,6 +193,12 @@ vm.key("ret")          # play a video
 time.sleep(1.0)
 vm.key("q")            # back to list
 time.sleep(0.3)
+vm.key("v")            # open the video loader (prompt prefilled with the sample.gif path)
+time.sleep(0.6)
+vm.type("\r")          # accept default path -> decode & play the bundled animated GIF
+time.sleep(2.0)        # let the GIF decode and play several frames
+vm.key("q")            # back to list
+time.sleep(0.3)
 vm.key("s")            # shorts
 time.sleep(0.8)
 vm.key("q")            # back
@@ -203,6 +209,8 @@ vm.type("\r")
 time.sleep(0.3)
 out = vm.run("echo after tube", "$")
 check("ClassicTube opens and returns to the shell", "after tube" in out, out)
+out = vm.run("ls /usr/share/classictube", "$")
+check("ClassicTube sample video is installed", "sample.gif" in out, out)
 vm.close()
 
 # ------------------------------------- network, browser, store, shello ----
