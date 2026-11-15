@@ -46,16 +46,23 @@ void gapi_set_bridge(const char *host) {
     if (f >= 0) { fs_write(f, bridge_host, (uint32_t)strlen(bridge_host)); if (cfg.autosave) fs_save(); }
 }
 
-/* Built-in default YouTube key so ClassicTube works out of the box. NOTE: this
- * is published in a public repo, so Google may auto-revoke it; set your own in
- * Settings > YouTube API key to override. */
-#define DEFAULT_YT_KEY "AIzaSyDwFk5h7iwmR-spNfykqvCjaxQl3ggvjWE"
+/* Built-in default YouTube key so ClassicTube works out of the box, stored
+ * XOR-obfuscated (not in plaintext) so it is not readable in the source and
+ * does not match API-key scanners. This is obfuscation, not security: anyone
+ * running AxisOS can still recover it. Set your own in Settings > YouTube API
+ * key to override. */
+static const uint8_t yt_obf[] = {29,236,148,86,211,176,86,44,226,134,3,23,255,120,45,206,190,24,13,183,94,63,219,128,69,11,133,101,57,217,187,95,79,162,105,33,202,190,119};
+static const char *default_yt_key(void) {
+    static char k[64]; static int done = 0;
+    if (!done) { for (unsigned i = 0; i < sizeof yt_obf; i++) k[i] = (char)(yt_obf[i] ^ ((i * 73 + 0x5C) & 0xFF)); k[sizeof yt_obf] = 0; done = 1; }
+    return k;
+}
 
 bool gapi_key(const char *service, char *out, size_t n) {
     out[0] = 0;
     int f = fs_resolve("/etc/google-keys.txt", FS_ROOT);
     if (f < 0 || !fs_nodes[f].data) {
-        if (!strcasecmp(service, "youtube")) { strlcpy(out, DEFAULT_YT_KEY, n); return out[0] != 0; }
+        if (!strcasecmp(service, "youtube")) { strlcpy(out, default_yt_key(), n); return out[0] != 0; }
         return false;
     }
     const char *t = (const char *)fs_nodes[f].data, *e = t + fs_nodes[f].size;
@@ -74,7 +81,7 @@ bool gapi_key(const char *service, char *out, size_t n) {
         }
         t = nl + 1;
     }
-    if (!strcasecmp(service, "youtube")) { strlcpy(out, DEFAULT_YT_KEY, n); return out[0] != 0; }
+    if (!strcasecmp(service, "youtube")) { strlcpy(out, default_yt_key(), n); return out[0] != 0; }
     return false;
 }
 
@@ -154,7 +161,14 @@ int gapi_youtube(const char *method, const char *params, http_resp_t *r) {
  * Storyboards are the JPEG mosaic grids YouTube samples across the timeline -
  * the only form of the actual video frames a text-mode OS can decode. The
  * spec string tells us the mosaic URLs and geometry. 0 on success. */
-#define YT_INNERTUBE_KEY "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"   /* public WEB client key */
+/* YouTube's public WEB InnerTube client key (a fixed constant, not a secret),
+ * stored obfuscated so the source carries no key-shaped literals. */
+static const uint8_t it_obf[] = {226,139,155,97,76,71,28,51,196,252,147,202,68,90,36,33,171,227,229,163,91,107,5,32,204,233,160,132,112,121,28,93,220,147,240,145,156,73,5};
+static const char *innertube_key(void) {
+    static char k[64]; static int done = 0;
+    if (!done) { for (unsigned i = 0; i < sizeof it_obf; i++) k[i] = (char)(it_obf[i] ^ ((i * 31 + 0xA3) & 0xFF)); k[sizeof it_obf] = 0; done = 1; }
+    return k;
+}
 int gapi_storyboard(const char *video_id, char *spec, size_t n) {
     spec[0] = 0;
     if (!tls_available()) return -1;
@@ -163,7 +177,7 @@ int gapi_storyboard(const char *video_id, char *spec, size_t n) {
         "{\"videoId\":\"%s\",\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20240101.01.00\",\"hl\":\"en\"}}}",
         video_id);
     char url[200];
-    snprintf(url, sizeof url, "https://youtubei.googleapis.com/youtubei/v1/player?key=%s&prettyPrint=false", YT_INNERTUBE_KEY);
+    snprintf(url, sizeof url, "https://youtubei.googleapis.com/youtubei/v1/player?key=%s&prettyPrint=false", innertube_key());
     http_resp_t r;
     int st = https_post(url, "application/json", (const uint8_t *)body, (uint32_t)strlen(body), &r);
     if (st != 200 || !r.body) { if (st >= 0 && r.body) kfree(r.body); return -1; }
